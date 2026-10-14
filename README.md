@@ -55,7 +55,8 @@ N = {
   array_initializer_tail,
   function_definition, return_type, parameter_list_optional, parameter_list,
   parameter_list_tail, parameter,
-  statement, statement_list, block, assignment, if_statement, else_clause,
+  statement, statement_list, block, assignment, assignment_core,
+  if_statement, else_clause,
   while_statement, for_statement, for_initializer_optional, expression_optional,
   for_initializer, return_statement, return_expression_optional,
   print_statement, read_statement,
@@ -75,19 +76,19 @@ The `P` set consists of the following BNF production rules.
 ### Program structure
 
 ```bnf
-program ::= declaration_list
+program -> declaration_list
 
-declaration_list ::= declaration declaration_list
+declaration_list -> declaration declaration_list
                    | ε
 
-declaration ::= variable_declaration
+declaration -> variable_declaration
               | function_definition
 ```
 
 ### Types
 
 ```bnf
-type ::= "int"
+type -> "int"
        | "double"
        | "char"
        | "bool"
@@ -96,26 +97,26 @@ type ::= "int"
 ### Declarations
 
 ```bnf
-variable_declaration ::= variable_declaration_core
+variable_declaration -> variable_declaration_core ";"
 
-variable_declaration_core ::= type IDENTIFIER
+variable_declaration_core -> type IDENTIFIER
                               variable_initializer
                             | type IDENTIFIER
                               "[" INTEGER "]"
                               array_declaration_initializer
 
-variable_initializer ::= "=" expression
+variable_initializer -> "=" expression
                        | ε
 
-array_declaration_initializer ::= "=" array_initializer
+array_declaration_initializer -> "=" array_initializer
                                 | ε
 
-array_initializer ::= "{" array_initializer_contents "}"
+array_initializer -> "{" array_initializer_contents "}"
 
-array_initializer_contents ::= expression array_initializer_tail
+array_initializer_contents -> expression array_initializer_tail
                              | ε
 
-array_initializer_tail ::= "," expression array_initializer_tail
+array_initializer_tail -> "," expression array_initializer_tail
                          | ε
 ```
 
@@ -123,29 +124,29 @@ array_initializer_tail ::= "," expression array_initializer_tail
 ### Functions
 
 ```bnf
-function_definition ::= return_type IDENTIFIER
+function_definition -> return_type IDENTIFIER
                         "(" parameter_list_optional ")"
                         block
 
-return_type ::= type
+return_type -> type
               | "void"
 
-parameter_list_optional ::= parameter_list
+parameter_list_optional -> parameter_list
                           | ε
 
-parameter_list ::= parameter parameter_list_tail
+parameter_list -> parameter parameter_list_tail
 
-parameter_list_tail ::= "," parameter parameter_list_tail
+parameter_list_tail -> "," parameter parameter_list_tail
                       | ε
 
-parameter ::= type IDENTIFIER
+parameter -> type IDENTIFIER
 ```
 
 
 ### Statements
 
 ```bnf
-statement ::= block
+statement -> block
             | variable_declaration
             | assignment
             | if_statement
@@ -158,25 +159,27 @@ statement ::= block
             | "continue" ";"
             | function_call ";"
 
-block ::= "{" statement_list "}"
+block -> "{" statement_list "}"
 
-statement_list ::= statement statement_list
+statement_list -> statement statement_list
                  | ε
 
-assignment ::= IDENTIFIER "=" expression
-             | IDENTIFIER "[" expression "]" "=" expression ";"
+assignment -> assignment_core ";"
 
-if_statement ::= "if" "(" expression ")"
+assignment_core -> IDENTIFIER "=" expression
+                  | IDENTIFIER "[" expression "]" "=" expression
+
+if_statement -> "if" "(" expression ")"
                  statement
                  else_clause
 
-else_clause ::= "else" statement
+else_clause -> "else" statement
               | ε
 
-while_statement ::= "while" "(" expression ")"
+while_statement -> "while" "(" expression ")"
                     statement
 
-for_statement ::= "for"
+for_statement -> "for"
                   "("
                     for_initializer_optional
                     ";"
@@ -186,20 +189,20 @@ for_statement ::= "for"
                   ")"
                   statement
 
-for_initializer_optional ::= for_initializer
+for_initializer_optional -> for_initializer
                            | ε
 
-expression_optional ::= expression
+expression_optional -> expression
                       | ε
 
-for_initializer ::= variable_declaration_core
-                  | assignment
+for_initializer -> variable_declaration_core
+                  | assignment_core
 
-return_statement ::= "return" expression ";"
+return_statement -> "return" expression ";"
 
-print_statement ::= "print" "(" expression ")" ";"
+print_statement -> "print" "(" expression ")" ";"
 
-read_statement ::= "read" "(" IDENTIFIER ")" ";"
+read_statement -> "read" "(" IDENTIFIER ")" ";"
 
 ```
 
@@ -207,74 +210,75 @@ read_statement ::= "read" "(" IDENTIFIER ")" ";"
 ### Expressions
 
 ```bnf
-expression ::= logical_and expression_tail
+expression -> logical_and expression_tail
 
-expression_tail ::= "||" logical_and expression_tail
+expression_tail -> "||" logical_and expression_tail
                   | ε
 
-logical_and ::= equality logical_and_tail
+logical_and -> equality logical_and_tail
 
-logical_and_tail ::= "&&" equality logical_and_tail
+logical_and_tail -> "&&" equality logical_and_tail
                    | ε
 
-equality ::= comparison equality_tail
+equality -> comparison equality_tail
 
-equality_tail ::= equality_operator comparison equality_tail
+equality_tail -> equality_operator comparison equality_tail
                 | ε
 
-equality_operator ::= "=="
+equality_operator -> "=="
                     | "!="
 
-comparison ::= additive comparison_tail
+comparison -> additive comparison_tail
 
-comparison_tail ::= comparison_operator additive comparison_tail
+comparison_tail -> comparison_operator additive comparison_tail
                   | ε
 
-comparison_operator ::= "<"
+comparison_operator -> "<"
                       | "<="
                       | ">"
                       | ">="
 
-additive ::= multiplicative additive_tail
+additive -> multiplicative additive_tail
 
-additive_tail ::= additive_operator multiplicative additive_tail
+additive_tail -> additive_operator multiplicative additive_tail
                 | ε
 
-additive_operator ::= "+"
+additive_operator -> "+"
                     | "-"
 
-multiplicative ::= unary multiplicative_tail
+multiplicative -> unary multiplicative_tail
 
-multiplicative_tail ::= multiplicative_operator unary multiplicative_tail
+multiplicative_tail -> multiplicative_operator unary multiplicative_tail
                       | ε
 
-multiplicative_operator ::= "*"
+multiplicative_operator -> "*"
                           | "/"
                           | "%"
 
-unary ::= unary_operator postfix
+unary -> unary_operator unary
+        | "(" type ")" unary
         | postfix
 
-unary_operator ::= "+"
+unary_operator -> "+"
                  | "-"
                  | "!"
 
-postfix ::= primary
+postfix -> primary
           | primary "[" expression "]"
           | function_call
 
-function_call ::= primary
+function_call -> primary
                   "(" argument_list_optional ")"
 
-argument_list_optional ::= argument_list
+argument_list_optional -> argument_list
                          | ε
 
-argument_list ::= expression argument_list_tail
+argument_list -> expression argument_list_tail
 
-argument_list_tail ::= "," expression argument_list_tail
+argument_list_tail -> "," expression argument_list_tail
                      | ε
 
-primary ::= INTEGER
+primary -> INTEGER
           | FLOAT
           | CHAR
           | STRING
@@ -282,7 +286,6 @@ primary ::= INTEGER
           | "false"
           | IDENTIFIER
           | "(" expression ")"
-          | "(" type ")" expression
 ```
 
 ## Example programs
@@ -303,7 +306,7 @@ From **lowest to highest precedence**:
 |     4 | `<`, `<=`, `>`, `>=`        | left          |
 |     5 | `+`, `-`                    | left          |
 |     6 | `*`, `/`, `%`               | left          |
-|     7 | unary `+`, `-`, `!`         | right         |
+|     7 | unary `+`, `-`, `!`, casts   | right         |
 |     8 | function call, indexing     | -----         |
 
 ### 2. Lexical considerations
