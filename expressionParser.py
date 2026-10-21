@@ -1,3 +1,4 @@
+import re
 from functools import reduce
 from dataclasses import dataclass
 from pprint import pprint
@@ -50,7 +51,8 @@ class FuncCall: name: str; args: list[Exp]
 
 
 
-whitespace = regex(r"\s*")
+# espaços e comentários (// e /* ... */) são ignorados
+whitespace = regex(r"(?:\s|//[^\n]*|/\*.*?\*/)*", flags=re.S)
 def lexeme(p):
     return p << whitespace
 
@@ -143,35 +145,36 @@ def pUnary():
 
 @generate
 def pPostfix():
-    primary = yield pPrimary
+    ident = yield pIdent.optional()
+    if ident is None:
+        return (yield pPrimary)
+    if (yield lexeme(string("[")).optional()) is not None:
+        index_expr = yield pExp
+        yield lexeme(string("]"))
+        return Index(ident, index_expr)
+    if (yield lexeme(string("(")).optional()) is not None:
+        args = yield pExp.sep_by(lexeme(string(",")))
+        yield lexeme(string(")"))
+        return FuncCall(ident.name, args)
+    return ident
 
-    # Recolher sufixos iterativamente (ex: a[1][2] ou f(x)(y)) de forma limpa
-    while True:
-        is_bracket = yield lexeme(string('[')).optional()
-        if is_bracket is not None:
-            index_expr = yield pExp
-            yield lexeme(string(']'))
-            primary = Index(primary, index_expr)
-            continue
-
-        is_paren = yield lexeme(string('(')).optional()
-        if is_paren is not None:
-            args = yield pExp.sep_by(lexeme(string(',')))
-            yield lexeme(string(')'))
-            func_name = primary.name if isinstance(primary, Ident) else primary
-            primary = FuncCall(func_name, args)
-            continue
-
-        break
-
-    return primary
+# palavras reservadas: não podem ser usadas como identificadores
+RESERVED_WORDS = {
+    "int", "double", "char", "bool", "void",
+    "if", "else", "while", "for",
+    "break", "continue", "return",
+    "print", "read", "true", "false",
+}
+identifier_pattern = (
+    r"(?!(?:" + "|".join(sorted(RESERVED_WORDS)) + r")\b)[A-Za-z][A-Za-z0-9_]*"
+)
 
 pTypeBool = lexeme(regex(r'true\b').map(lambda _: True) | regex(r'false\b').map(lambda _: False))
 pFloat = lexeme(regex(r'[0-9]+\.[0-9]+([eE][+-]?[0-9]+)?')).map(float)
 pInt = lexeme(regex(r'[0-9]+')).map(int)
 pChar = lexeme(regex(r"'([^'\\]|\\.)'"))
 pString = lexeme(regex(r'"([^"\\]|\\.)*"'))
-pIdent = lexeme(regex(r'[A-Za-z][A-Za-z0-9_]*')).map(Ident)
+pIdent = lexeme(regex(identifier_pattern)).map(Ident)
 
 
 # valores numericos e bool sao do data type Val, mas os identificadores sao do data type Ident, para que possamos distinguir entre valores literais e variáveis.
@@ -194,84 +197,85 @@ pPrimary = (
 #pprint(pExp.parse("n * factorial(n - 1)"))
 #pprint(pExp.parse("first % second"))
 
-tests = [
-    # --- literais e identificadores
-    "42",
-    "3.14",
-    "2.5e10",
-    "'a'",
-    '"hello"',
-    "true",
-    "false",
-    "x",
-    "true_flag",
+
+if __name__ == "__main__":
+    tests = [
+        # --- literais e identificadores
+        "42",
+        "3.14",
+        "2.5e10",
+        "'a'",
+        '"hello"',
+        "true",
+        "false",
+        "x",
+        "true_flag",
  
-    # --- precedência
-    "1 + 2 * 3",
-    "1 * 2 + 3",
-    "1 + 2 < 3 + 4",
-    "1 < 2 == 3 < 4",
-    "a || b && c",
-    "a && b || c",
-    "a == b && c != d",
+        # --- precedência
+        "1 + 2 * 3",
+        "1 * 2 + 3",
+        "1 + 2 < 3 + 4",
+        "1 < 2 == 3 < 4",
+        "a || b && c",
+        "a && b || c",
+        "a == b && c != d",
  
-    # --- associatividade (esquerda)
-    "1 - 2 - 3",
-    "8 / 4 / 2",
-    "a || b || c",
-    "1 < 2 < 3",
-    "a == b == c",
+        # --- associatividade (esquerda)
+        "1 - 2 - 3",
+        "8 / 4 / 2",
+        "a || b || c",
+        "1 < 2 < 3",
+        "a == b == c",
  
-    # --- parênteses
-    "(1 + 2) * 3",
-    "((x))",
-    "a && (b || c)",
+        # --- parênteses
+        "(1 + 2) * 3",
+        "((x))",
+        "a && (b || c)",
  
-    # --- unários e casts
-    "-x",
-    "!!x",
-    "- -x",
-    "-x * 2",
-    "(int) x",
-    "(double) a / b",
-    "(char) (x + 1)",
-    "(x) + 1",
+        # --- unários e casts
+        "-x",
+        "!!x",
+        "- -x",
+        "-x * 2",
+        "(int) x",
+        "(double) a / b",
+        "(char) (x + 1)",
+        "(x) + 1",
  
-    # --- índices e chamadas
-    "v[0]",
-    "v[i + 1]",
-    "f()",
-    "f(1)",
-    "f(1, x, 2 + 3)",
-    "f(g(x))",
-    "f(x) + 1",
-    "n * factorial(n - 1)",
-    "values[f(i)]",
+        # --- índices e chamadas
+        "v[0]",
+        "v[i + 1]",
+        "f()",
+        "f(1)",
+        "f(1, x, 2 + 3)",
+        "f(g(x))",
+        "f(x) + 1",
+        "n * factorial(n - 1)",
+        "values[f(i)]",
  
-    # --- espaços
-    "1+2",
-    "f( 1 , 2 )",
-    "v[ i ]",
-    "  1   +   2  ",        # deve falhar: espaços no início
+        # --- espaços
+        "1+2",
+        "f( 1 , 2 )",
+        "v[ i ]",
+        "  1   +   2  ",        # deve falhar: espaços no início
  
-    # --- devem falhar com ParseError
-    "i = i + 1",
-    "1 +",
-    "* 2",
-    "1 2",
-    "f(,)",
-    "f(1,)",
-    "v[]",
-    "(1 + 2",
-    "(int)",
-    "a ! b",
-]
+        # --- devem falhar com ParseError
+        "i = i + 1",
+        "1 +",
+        "* 2",
+        "1 2",
+        "f(,)",
+        "f(1,)",
+        "v[]",
+        "(1 + 2",
+        "(int)",
+        "a ! b",
+    ]
  
-for t in tests:
-    print(repr(t))
-    try:
-        pprint(pExp.parse(t))
-    except ParseError:
-        print("ParseError")
-    print()
- 
+    for t in tests:
+        print(repr(t))
+        try:
+            pprint(pExp.parse(t))
+        except ParseError:
+            print("ParseError")
+        print()

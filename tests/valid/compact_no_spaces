@@ -1,0 +1,1 @@
+int g=1;int main(){int a[2]={1,2};for(int i=0;i<2;i=i+1){g=g+a[i];}if(g>0)print(g);else print(0);return 0;}

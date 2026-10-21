@@ -1,0 +1,4 @@
+int main() {
+    double a = 0.5; double b = 10.0; double c = 2.5e10; double d = 1.0E-3; double e = 3.14e+2;
+    return 0;
+}

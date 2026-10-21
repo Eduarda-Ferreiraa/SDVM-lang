@@ -1,6 +1,7 @@
 from dataclasses import dataclass
 from parsy import generate, regex, string, ParseError
-from declarations import identifier, variable_declaration, variable_declaration_core
+from declarations import variable_declaration, variable_declaration_core
+from statements import pAssignmentCore
 from expressionParser import lexeme, pExp, whitespace
 
 
@@ -31,24 +32,9 @@ class ForStatement:
     body: object
 
 
-@dataclass
-class Assignment:
-    target: str
-    value: object
-
-
 # Reconhece palavras reservadas completas, como "if" e "while".
 def keyword(word):
     return lexeme(regex(rf"{word}\b"))
-
-
-# Reconhece uma atribuição sem ponto e vírgula: i = i + 1.
-@generate
-def pAssignmentCore():
-    target = yield identifier
-    yield lexeme(string("="))
-    value = yield pExp
-    return Assignment(target, value)
 
 
 # Cria parsers recursivos que partilham o mesmo parser de instruções.

@@ -1,0 +1,12 @@
+int main() {
+    int a = -5;
+    int b = +a;
+    int c = - -a;
+    bool n = !false;
+    bool m = !!n;
+    double d = (double)a / (double)b;
+    int e = (int)d;
+    char f = (char)(e + 65);
+    bool g = (bool)a;
+    return 0;
+}

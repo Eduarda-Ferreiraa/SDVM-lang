@@ -1,0 +1,6 @@
+int main() {
+    int iffy = 1; int format = 2; int returned = 3; int int_value = 4;
+    int true_flag = 5; int printer = 6; int reader = 7; int forx = 8; int whilex = 9;
+    int elsewhere = 10; int breakpoint = 11; int continued = 12; int voidish = 13;
+    return iffy + format + returned + int_value + true_flag + printer;
+}

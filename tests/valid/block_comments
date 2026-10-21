@@ -1,0 +1,10 @@
+/* header
+   spanning
+   several lines */
+int /* inline */ main( /* no params */ ) {
+    int x = 1; /* trailing */ // and a line comment
+    /* a // inside a block comment */
+    // and /* inside a line comment
+    return x;
+}
+// comment on the very last line, no newline

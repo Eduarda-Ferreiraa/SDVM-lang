@@ -3,7 +3,9 @@ from typing import Any
 
 from parsy import generate, regex, string
 
-from expressionParser import Exp, pExp, type_parser, lexeme
+from expressionParser import (
+    Exp, pExp, type_parser, lexeme, RESERVED_WORDS, identifier_pattern,
+)
 
 
 @dataclass
@@ -35,21 +37,8 @@ class FunctionDefinition:
     body: Any
 
 
-#palavras que não podem ser nomes 
-RESERVED_WORDS = {
-    "int", "double", "char", "bool", "void",
-    "if", "else", "while", "for",
-    "break", "continue", "return",
-    "print", "read", "true", "false",
-}
-
-#reconhecem nomes
-identifier_pattern = (
-    r"(?!(?:"
-    + "|".join(sorted(RESERVED_WORDS))
-    + r")\b)[A-Za-z][A-Za-z0-9_]*"
-)
-
+# RESERVED_WORDS e identifier_pattern vêm do expressionParser (partilhados)
+# reconhecem nomes
 identifier = lexeme(regex(identifier_pattern))
 
 #função sem valor

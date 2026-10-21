@@ -1,4 +1,4 @@
-from parsy import generate, regex, string
+from parsy import generate, regex, string, fail
 from dataclasses import dataclass
 # imports dos outros ficheiros
 from expressionParser import Exp, pExp, pPostfix, FuncCall, lexeme, whitespace
@@ -94,27 +94,33 @@ def pRead():
     return Read(target=val)
 
 @generate
-def pAssignment():
-    yield whitespace
-    variavel = yield lexeme(identifier)
-    is_array = yield (lexeme(string("["))).optional()
+def pAssignmentCore():
+    variavel = yield identifier
+    is_array = yield lexeme(string("[")).optional()
     indice = None
     if is_array is not None:
         indice = yield pExp
         yield lexeme(string("]"))
     yield lexeme(string("="))
     val = yield pExp
-    yield lexeme(string(";"))
     if indice is not None:
-        return ArrayAssignment(target= variavel, index=indice, value=val)
-    return(Assignment(target=variavel, value=val))
+        return ArrayAssignment(target=variavel, index=indice, value=val)
+    return Assignment(target=variavel, value=val)
+
+
+@generate
+def pAssignment():
+    yield whitespace
+    core = yield pAssignmentCore
+    yield lexeme(string(";"))
+    return core
 
 @generate
 def pFunctionCallStatement():
     yield whitespace
     exp = yield pPostfix 
     if not isinstance(exp, FuncCall):
-        return (yield string("__fail__"))
+        return (yield fail("a function call"))
     yield lexeme(string(";"))
     return FunctionCallStatement(call=exp)
 
@@ -127,4 +133,3 @@ simple_statement = (
     | pAssignment
     | pFunctionCallStatement
 )
-

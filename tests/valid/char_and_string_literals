@@ -1,0 +1,11 @@
+int main() {
+    char nl = '\n';
+    char quote = '\'';
+    char backslash = '\\';
+    char space = ' ';
+    print("line one\nline two");
+    print("she said \"hi\"");
+    print("http://example.com // not a comment");
+    print("");
+    return 0;
+}

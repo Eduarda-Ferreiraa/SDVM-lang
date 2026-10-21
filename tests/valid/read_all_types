@@ -1,0 +1,5 @@
+int main() {
+    int i; double d; char c; bool b;
+    read(i); read(d); read(c); read(b);
+    return 0;
+}

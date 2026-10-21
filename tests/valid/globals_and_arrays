@@ -1,0 +1,14 @@
+// globals of every type
+int counter = 0;
+double rate = 0.75;
+char grade = 'A';
+bool enabled = true;
+int table[4] = {1, 2, 3, 4};
+int scratch[10];
+
+int main() {
+    counter = counter + 1;
+    scratch[0] = table[3];
+    print(rate);
+    return 0;
+}
