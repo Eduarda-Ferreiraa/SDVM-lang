@@ -1,8 +1,8 @@
 from dataclasses import dataclass
 from parsy import generate, regex, string, ParseError
-from declarations import variable_declaration, variable_declaration_core
-from statements import pAssignmentCore
-from expressionParser import lexeme, pExp, whitespace
+from .declarations import variable_declaration, variable_declaration_core
+from .statements import pAssignmentCore
+from .expressionParser import lexeme, pExp, whitespace
 
 
 # Classes que representam as estruturas na árvore sintática (AST).

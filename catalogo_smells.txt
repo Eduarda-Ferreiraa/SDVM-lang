@@ -1,0 +1,199 @@
+CATÁLOGO DE SMELLS — SDVM-lang
+==============================
+
+Padrões escritos sobre a AST atual do parser:
+  literais   IntLit(v), FloatLit(v), BoolLit(v), CharLit(v), StringLit(v)
+  variáveis  Ident(name)            arrays  Index(target: str, index: Exp)
+  chamadas   FuncCall(name, args)   unários UnaryOp(op, expr)   casts Cast(t, expr)
+  binários   Add, Sub, Mul, Div, Mod, Equals, NotEquals, LessThan, LessEqual,
+             GreaterThan, GreaterEqual, And, Or   (campos left, right)
+  instruções Block, IfStatement, WhileStatement, ForStatement, Assignment,
+             ArrayAssignment, Return, Break, Continue, Print, Read,
+             FunctionCallStatement, VariableDeclaration, ArrayDeclaration
+  topo       Program(declarations), FunctionDefinition(return_type, name, parameters, body)
+
+Conceitos usados nas condições:
+  - Expressão PURA: não contém FuncCall. Na SDVM-lang a atribuição não é
+    expressão e o read é instrução, por isso o único efeito lateral possível
+    dentro de uma expressão é uma chamada de função.
+  - Tipos: obtidos de uma inferência leve (tipo declarado de cada nome:
+    variáveis, arrays, parâmetros, retorno das funções). Se um nome tem tipos
+    diferentes em sítios diferentes, os refactorings que dependem dele não se
+    aplicam (opção conservadora).
+  - Promoção: uma operação aritmética sobre char/bool dá int, por isso
+    c + 0 -> c muda o tipo (print(c + 0) imprime o código do carácter).
+
+TD = soma de (ocorrências x custo de remediação por ocorrência), em minutos,
+inspirado no modelo SQALE (SonarQube). Os custos são uma proposta a
+justificar no relatório.
+
+
+-----------------------------------------------------------------------------
+A. SMELLS DE EXPRESSÃO
+   Locais, refactoring com estratégias TP (innermost), injetáveis.
+   ESTADO: A1-A7 implementados em smells_expressao.py
+           (deteção full_tdTU, refactoring innermost, injeção full_buTP).
+-----------------------------------------------------------------------------
+
+A1  Soma/subtração com 0                                          TD: 1 min
+    Padrão:      Add(x, IntLit(0)), Add(IntLit(0), x), Sub(x, IntLit(0))
+                 (também com FloatLit(0.0))
+    Refactoring: x
+    Condição:    x não é char/bool (promoção); com 0.0, x tem de ser double
+                 (x + 0.0 com x int dá double)
+
+A2  Multiplicação/divisão por 1                                   TD: 1 min
+    Padrão:      Mul(x, IntLit(1)), Mul(IntLit(1), x), Div(x, IntLit(1))
+                 (também com FloatLit(1.0))
+    Refactoring: x
+    Condição:    as mesmas do A1
+
+A3  Multiplicação por 0                                           TD: 2 min
+    Padrão:      Mul(x, IntLit(0)), Mul(IntLit(0), x)
+    Refactoring: o próprio literal (0 ou 0.0)
+    Condição:    x puro (f() * 0 perdia a chamada) e x não double
+                 (NaN * 0 e inf * 0 não dão 0)
+
+A4  Comparação com booleano                                       TD: 2 min
+    Padrão:      Equals(x, BoolLit(_)), NotEquals(x, BoolLit(_)), e simétricos
+    Refactoring: x == true, x != false  ->  x
+                 x == false, x != true  ->  UnaryOp("!", x)
+    Condição:    x booleano (x == true com x = 2 é falso, mas x é verdadeiro)
+
+A5  Dupla negação                                                 TD: 1 min
+    Padrão:      UnaryOp("!", UnaryOp("!", x)), UnaryOp("-", UnaryOp("-", x))
+    Refactoring: x
+    Condição:    "!!x": x booleano (!!5 == 1, não 5); "-(-x)": x não char/bool
+
+A6  Auto-comparação                                               TD: 2 min
+    Padrão:      Equals(x, x), NotEquals(x, x), LessThan(x, x), LessEqual(x, x),
+                 GreaterThan(x, x), GreaterEqual(x, x)
+    Refactoring: ==, <=, >=  ->  BoolLit(True)
+                 !=, <,  >   ->  BoolLit(False)
+    Condição:    x puro (f() == f() pode ser falso) e x não double (NaN != NaN)
+
+A7  Cast redundante                                               TD: 1 min
+    Padrão:      Cast(t, Cast(t, x)), e em geral Cast(t, e) com e já do tipo t
+                 (ex.: (int)a com a declarado int)
+    Refactoring: e
+    Condição:    nenhuma
+
+
+-----------------------------------------------------------------------------
+B. SMELLS DE INSTRUÇÃO / FLUXO DE CONTROLO
+   Locais, refactoring com estratégias TP, injetáveis.
+   ESTADO: por implementar.
+-----------------------------------------------------------------------------
+
+B1  Condição constante                                            TD: 3 min
+    Padrão:      IfStatement(BoolLit(True), S, T)    -> S
+                 IfStatement(BoolLit(False), S, T)   -> T (ou remover, sem else)
+                 WhileStatement(BoolLit(False), _)   -> remover
+
+B2  Ramos iguais                                                  TD: 3 min
+    Padrão:      IfStatement(c, S, S)
+    Refactoring: S
+    Condição:    c puro
+
+B3  Then vazio                                                    TD: 2 min
+    Padrão:      IfStatement(c, Block([]), S)
+    Refactoring: IfStatement(UnaryOp("!", c), S, None)
+
+B4  Else vazio                                                    TD: 1 min
+    Padrão:      IfStatement(c, S, Block([]))
+    Refactoring: IfStatement(c, S, None)
+
+B5  Retorno booleano redundante                                   TD: 3 min
+    Padrão:      if (c) return true; else return false;
+                 IfStatement(c, Return(BoolLit(True)), Return(BoolLit(False)))
+                 (também com os returns dentro de blocos)
+    Refactoring: return c;   (ou return !c; no caso inverso)
+
+B6  Ifs aninhados colapsáveis                                     TD: 4 min
+    Padrão:      if (a) { if (b) S }   sem else em nenhum dos dois
+    Refactoring: if (a && b) S
+
+B7  Bloco redundante                                              TD: 1 min
+    Padrão:      Block([Block(ss)])
+    Refactoring: Block(ss)
+
+B8  Código morto                                                  TD: 3 min
+    Padrão:      instruções num Block depois de Return / Break / Continue
+    Refactoring: remover essas instruções
+
+B9  Auto-atribuição                                               TD: 1 min
+    Padrão:      Assignment(x, Ident(x))
+    Refactoring: remover a instrução
+
+B10 Condição negada com else                                      TD: 2 min
+    Padrão:      IfStatement(UnaryOp("!", c), A, B)
+    Refactoring: IfStatement(c, B, A)
+
+
+-----------------------------------------------------------------------------
+C. SMELLS DE DESIGN / MÉTRICAS
+   Os do catálogo para código não-OO (CodeSmells-2026.2027.pdf).
+   Sobretudo deteção com limiares; refactoring parcial ou só reporte.
+   ESTADO: por implementar.
+-----------------------------------------------------------------------------
+
+C1  Long Function                                                 TD: 20 min
+    Deteção:     nº de instruções da função > N (ex.: 30)
+    Refactoring: só reporte
+
+C2  Long Parameter List                                           TD: 10 min
+    Deteção:     len(parameters) >= 4
+    Refactoring: só reporte
+
+C3  Deep Nesting                                                  TD: 15 min
+    Deteção:     profundidade de If/While/For > 3
+    Refactoring: parcial (B6, early return)
+
+C4  Complex Conditional                                           TD: 10 min
+    Deteção:     mais de 3 operadores && / || numa condição
+    Refactoring: só reporte
+
+C5  Magic Numbers                                                 TD: 5 min
+    Deteção:     literais diferentes de 0, 1, -1 fora de declarações
+    Refactoring: extrair para constante global
+
+C6  Identificadores curtos                                        TD: 2 min
+    Deteção:     len(name) == 1, exceto i, j, k como variável de ciclo for
+    Refactoring: só reporte
+
+C7  Variável / parâmetro não usado                                TD: 3 min
+    Deteção:     duas fases: recolher os usos (TU), depois remover a
+                 declaração (TP). Usos: Ident(n) para escalares, Index(n, _)
+                 para arrays, mais os alvos de Assignment/ArrayAssignment/Read.
+    Refactoring: remover a declaração
+
+C8  Global Mutable State                                          TD: 15 min
+    Deteção:     variável global com Assignment dentro de uma função
+    Refactoring: só reporte
+
+C9  Duplicated Code                                               TD: 30 min
+    Deteção:     blocos/funções estruturalmente iguais (o == das dataclasses
+                 compara a árvore; com os literais por tipo, IntLit(1) e
+                 BoolLit(True) já não são confundidos)
+    Refactoring: só reporte
+
+
+-----------------------------------------------------------------------------
+FORA DO CATÁLOGO
+-----------------------------------------------------------------------------
+Comments (do PDF): o parser descarta os comentários, por isso não é
+detetável sem alterar o lexer. Fica de fora.
+
+
+-----------------------------------------------------------------------------
+MÉTRICAS (calculadas sobre a AST, sem alterar o parser)
+-----------------------------------------------------------------------------
+LOC                     linhas de pretty(ast): funciona para programas
+                        originais e transformados, independente da formatação
+                        (opcional: LOC do ficheiro fonte, sem linhas vazias
+                        nem comentários)
+Nº de ifs / ciclos      contagem de IfStatement / WhileStatement / ForStatement
+Complexidade ciclomática por função: 1 + nº de if/while/for/&&/||
+Nº de smells            por tipo e total (relatório)
+TD                      soma de ocorrências x custo (minutos) = tempo estimado
+                        de um engenheiro para resolver

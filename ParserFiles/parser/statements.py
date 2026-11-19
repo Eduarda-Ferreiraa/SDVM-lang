@@ -1,9 +1,10 @@
 from parsy import generate, regex, string, fail
 from dataclasses import dataclass
 # imports dos outros ficheiros
-from expressionParser import Exp, pExp, pPostfix, FuncCall, lexeme, whitespace
-from declarations import identifier
+from .expressionParser import Exp, pExp, pPostfix, FuncCall, lexeme, whitespace
+from .declarations import identifier
 
+# le a palavra passada como argumento
 def keyword(word: str):
     return lexeme(regex(rf"{word}\b")) 
 
@@ -61,6 +62,7 @@ def pContinue():
     yield lexeme(string(";"))
     return Continue()
 
+# adicionamos opcao de so dar return sem valor 
 @generate
 def pReturn():
     yield whitespace
@@ -115,6 +117,7 @@ def pAssignment():
     yield lexeme(string(";"))
     return core
 
+# verifica se é mesmo uma funcao no PostFix
 @generate
 def pFunctionCallStatement():
     yield whitespace

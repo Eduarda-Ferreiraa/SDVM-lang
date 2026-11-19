@@ -3,7 +3,7 @@ from typing import Any
 
 from parsy import generate, regex, string
 
-from expressionParser import (
+from .expressionParser import (
     Exp, pExp, type_parser, lexeme, RESERVED_WORDS, identifier_pattern,
 )
 
@@ -110,10 +110,11 @@ def parameter():
     )
 
 
-parameter_list = parameter.sep_by(lexeme(string(",")))
+parameter_list = parameter.sep_by(lexeme(string(","))) # sep_by ja trata do caso vazio
 
 
 #parser de funções 
+# funcao de fora existe so para receber o block parser, pois se o importassemos tinhamos import ciclico e dava erro
 def make_function_definition(block_parser):
     @generate
     def function_definition():

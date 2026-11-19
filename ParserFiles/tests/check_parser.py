@@ -12,12 +12,12 @@ import glob
 import os
 import sys
 
-HERE = os.path.dirname(os.path.abspath(__file__))
-sys.path.insert(0, HERE)
+HERE = os.path.dirname(os.path.abspath(__file__))                # .../SDVM-lang/tests
+PARSER_DIR = os.path.normpath(os.path.join(HERE, "..", "parser"))  # .../SDVM-lang/parser
+sys.path.insert(0, PARSER_DIR)
 
 from parsy import ParseError   # noqa: E402
-from parser import program     # noqa: E402
-
+from projeto1.SDVM_lang.ParserFiles.parser.parser import program
 
 def files_in(folder):
     return sorted(p for p in glob.glob(os.path.join(folder, "*")) if os.path.isfile(p))
@@ -41,8 +41,8 @@ def main():
                     help="pastas cujos programas têm de ser rejeitados")
     args = ap.parse_args()
 
-    accept = args.accept + [os.path.join(HERE, "tests", "valid")]
-    reject = args.reject + [os.path.join(HERE, "tests", "invalid")]
+    accept = args.accept + [os.path.join(HERE, "valid")]
+    reject = args.reject + [os.path.join(HERE, "invalid")]
     failures = 0
 
     for folder in accept:

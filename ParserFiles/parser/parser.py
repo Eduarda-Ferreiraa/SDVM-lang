@@ -1,16 +1,16 @@
 from dataclasses import dataclass
 from parsy import eof
 
-from expressionParser import whitespace
-from declarations import (
+from .expressionParser import whitespace
+from .declarations import (
     variable_declaration,
     make_function_definition,
     VariableDeclaration,
     ArrayDeclaration,
     FunctionDefinition,
 )
-from control_flow import build_control_flow_parsers
-from statements import simple_statement
+from .control_flow import build_control_flow_parsers
+from .statements import simple_statement
 
 local_statement = variable_declaration | simple_statement
 
