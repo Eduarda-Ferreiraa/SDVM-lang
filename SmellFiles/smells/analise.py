@@ -12,7 +12,7 @@
 # não usada" precisa das declarações.
 
 import random
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, fields, is_dataclass
 
 from StrategicProg.pyztrategic.zipper import toZipper
 from StrategicProg.pyztrategic import strategy as st
@@ -128,6 +128,36 @@ def promovida(e, ctx) -> bool:
     return bool(tipos_de(e, ctx) & {"char", "bool", "string"})
 
 
+def numeros_em_declaracoes(prog):
+    excluidos = set()
+
+    def visitar(no):
+        if isinstance(no, (IntLit, FloatLit)):
+            excluidos.add(id(no))
+
+        elif isinstance(no, (list, tuple)):
+            for elemento in no:
+                visitar(elemento)
+
+        elif is_dataclass(no):
+            for campo in fields(no):
+                visitar(getattr(no, campo.name))
+
+    def procurar(no):
+        if isinstance(no, (VariableDeclaration, ArrayDeclaration)):
+            visitar(no.initializer)
+
+        elif isinstance(no, (list, tuple)):
+            for elemento in no:
+                procurar(elemento)
+
+        elif is_dataclass(no):
+            for campo in fields(no):
+                procurar(getattr(no, campo.name))
+
+    procurar(prog)
+    return excluidos
+
 # ---------------------------------------------------------------------
 # Contexto: o que se calcula uma vez por programa
 # ---------------------------------------------------------------------
@@ -136,10 +166,15 @@ def promovida(e, ctx) -> bool:
 class Contexto:
     tipos: dict[str, set[str]]
     rng: random.Random = field(default_factory=random.Random)
+    numeros_excluidos: set[int] = field(default_factory=set)
 
 
 def contexto(prog, seed=None) -> Contexto:
-    return Contexto(tipos_declarados(prog), random.Random(seed))
+    return Contexto(
+        tipos_declarados(prog),
+        random.Random(seed),
+        numeros_em_declaracoes(prog)
+    )
 
 
 # ---------------------------------------------------------------------
