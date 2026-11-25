@@ -104,3 +104,48 @@ def complexidade_ciclomatica(funcao):
         + contar_ciclos(corpo)
         + contar_operadores_logicos(corpo)
     )
+
+
+# =====================================================================
+# Métricas 1: parâmetros por função e LOC
+# =====================================================================
+from StrategicProg.pyztrategic.zipper import toZipper
+from StrategicProg.pyztrategic import strategy as st
+
+from projeto1.SDVM_lang.ParserFiles.parser.declarations import FunctionDefinition
+
+from .analise import falha
+from .prettyPrinter import pretty
+
+
+# ---------------------------------------------------------------------
+# Parâmetros por função (TU). A mesma contagem é usada pelo smell C2.
+# ---------------------------------------------------------------------
+
+def n_parametros(f) -> int:
+    return len(f.parameters)
+
+
+def parametros_de(n):
+    """worker: numa função devolve [(nome, nº de parâmetros)]; nos outros nós falha."""
+    match n:
+        case FunctionDefinition(_, nome, _, _):
+            return [(nome, n_parametros(n))]
+        case _:
+            falha()
+
+
+def parametros_por_funcao(prog) -> list[tuple[str, int]]:
+    """[(nome, nº de parâmetros)], incluindo funções com 0 parâmetros."""
+    return st.full_tdTU(lambda z: st.adhocTU(st.failTU, parametros_de, z), toZipper(prog))
+
+
+# ---------------------------------------------------------------------
+# LOC: linhas NÃO vazias de pretty(ast).
+# Conta as linhas só com chavetas. Não é o nº de instruções e não conta
+# comentários (o parser descarta-os). Serve para programas originais e
+# transformados, porque parte da AST e não do ficheiro.
+# ---------------------------------------------------------------------
+
+def loc(prog) -> int:
+    return sum(1 for linha in pretty(prog).splitlines() if linha.strip())

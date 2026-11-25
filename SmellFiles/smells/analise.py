@@ -12,6 +12,7 @@
 # não usada" precisa das declarações.
 
 import random
+from collections import Counter
 from dataclasses import dataclass, field, fields, is_dataclass
 
 from StrategicProg.pyztrategic.zipper import toZipper
@@ -25,7 +26,7 @@ from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import (
 from projeto1.SDVM_lang.ParserFiles.parser.declarations import (
     VariableDeclaration, ArrayDeclaration, Parameter, FunctionDefinition,
 )
-
+from .analise_c import nomes_usados, declaracoes_em_for, contagem_blocos
 LITERAIS = (IntLit, FloatLit, BoolLit, CharLit, StringLit)
 RELACIONAIS = (Equals, NotEquals, LessThan, LessEqual, GreaterThan, GreaterEqual)
 ARITMETICOS = (Add, Sub, Mul, Div, Mod)
@@ -167,13 +168,19 @@ class Contexto:
     tipos: dict[str, set[str]]
     rng: random.Random = field(default_factory=random.Random)
     numeros_excluidos: set[int] = field(default_factory=set)
+    usados: set[str] = field(default_factory=set)
+    decl_for: set[int] = field(default_factory=set)
+    blocos: Counter = field(default_factory=Counter)
 
 
 def contexto(prog, seed=None) -> Contexto:
     return Contexto(
-        tipos_declarados(prog),
-        random.Random(seed),
-        numeros_em_declaracoes(prog)
+        tipos=tipos_declarados(prog),
+        rng=random.Random(seed),
+        numeros_excluidos=numeros_em_declaracoes(prog),
+        usados=nomes_usados(prog),
+        decl_for=declaracoes_em_for(prog),
+        blocos=contagem_blocos(prog),
     )
 
 
