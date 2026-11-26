@@ -41,8 +41,13 @@ def deteta_soma_zero(n, ctx):
     return se_aplica(corrige_soma_zero, n, ctx)     # smell = a correção aplica-se
 
 
+NEUTROS_SOMA = (IntLit(0), FloatLit(0.0))
+NEUTROS_MULT = (IntLit(1), FloatLit(1.0))
+
+
 def injeta_soma_zero(n, z, ctx):
-    if not eh_numerica(n, ctx):
+    # não num 0 / 0.0: 0 + 0.0 desfazia-se em 0 (a regra x + 0 apanha o lado errado)
+    if n in NEUTROS_SOMA or not eh_numerica(n, ctx):
         falha()
     return ctx.rng.choice([Add(n, IntLit(0)), Add(IntLit(0), n), Sub(n, IntLit(0))])
 
@@ -67,7 +72,8 @@ def deteta_mult_um(n, ctx):
 
 
 def injeta_mult_um(n, z, ctx):
-    if n in (IntLit(0), FloatLit(0.0)) or not eh_numerica(n, ctx):   # 1 * 0 seria também A3
+    # não num 0 (1 * 0 seria também A3) nem num 1 / 1.0 (1 * 1.0 desfazia-se em 1)
+    if n in NEUTROS_SOMA + NEUTROS_MULT or not eh_numerica(n, ctx):
         falha()
     return ctx.rng.choice([Mul(n, IntLit(1)), Mul(IntLit(1), n), Div(n, IntLit(1))])
 

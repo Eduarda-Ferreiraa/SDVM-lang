@@ -26,7 +26,7 @@ from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import (
 from projeto1.SDVM_lang.ParserFiles.parser.declarations import (
     VariableDeclaration, ArrayDeclaration, Parameter, FunctionDefinition,
 )
-from .analise_c import nomes_usados, declaracoes_em_for, contagem_blocos
+from .analise_c import nomes_usados, declaracoes_contador, contagem_blocos, copias_duplicadas, nomes_globais
 LITERAIS = (IntLit, FloatLit, BoolLit, CharLit, StringLit)
 RELACIONAIS = (Equals, NotEquals, LessThan, LessEqual, GreaterThan, GreaterEqual)
 ARITMETICOS = (Add, Sub, Mul, Div, Mod)
@@ -181,6 +181,8 @@ class Contexto:
     usados: set[str] = field(default_factory=set)
     decl_for: set[int] = field(default_factory=set)
     blocos: Counter = field(default_factory=Counter)
+    c9_copias: set[int] = field(default_factory=set)   # C9: id() dos blocos que são cópias a mais
+    globais: set[str] = field(default_factory=set)     # C8: nomes das variáveis/arrays globais
 
 
 def contexto(prog, seed=None) -> Contexto:
@@ -189,8 +191,10 @@ def contexto(prog, seed=None) -> Contexto:
         rng=random.Random(seed),
         numeros_excluidos=numeros_em_declaracoes(prog),
         usados=nomes_usados(prog),
-        decl_for=declaracoes_em_for(prog),
+        decl_for=declaracoes_contador(prog),
         blocos=contagem_blocos(prog),
+        c9_copias=copias_duplicadas(prog),
+        globais=nomes_globais(prog),
     )
 
 

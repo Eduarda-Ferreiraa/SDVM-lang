@@ -12,10 +12,9 @@ from projeto1.SDVM_lang.ParserFiles.parser.control_flow import Block
 
 from .smell import Smell
 from .metricas import n_parametros
-from .analise_c import MIN_INSTRUCOES
 
 LIMITE_PARAMETROS = 4          # C2: 4 ou mais parâmetros
-LETRAS_CICLO = {"i", "j", "k"}  # C6: isentas quando declaradas no for
+LETRAS_CICLO = {"i", "j", "k"}  # C6: isentas quando são contador de um for
 
 
 def nome_declarado(n):
@@ -35,8 +34,9 @@ def deteta_c2(n, ctx):
 
 
 # ---------------- C6: identificador curto -----------------------------
-# Conta a declaração (não cada uso). Nome com 1 letra, exceto i/j/k
-# declarados no initializer de um for (ctx.decl_for, ver analise_c.py).
+# Conta a declaração (variável, array ou parâmetro), não cada uso. Nome com
+# 1 letra, exceto i/j/k que sejam contador de um for na mesma função
+# (ctx.decl_for, ver declaracoes_contador em analise_c.py).
 
 def deteta_c6(n, ctx):
     nome = nome_declarado(n)
@@ -55,13 +55,14 @@ def deteta_c7(n, ctx):
 
 
 # ---------------- C9: código duplicado --------------------------------
-# Bloco com >= MIN_INSTRUCOES instruções que aparece 2 ou mais vezes
-# (igualdade estrutural exata). Cada cópia conta (ocorrências participantes).
+# Bloco com >= MIN_INSTRUCOES instruções (analise_c.py) que é uma CÓPIA A
+# MAIS de outro igual (igualdade estrutural exata). O original não conta:
+# duas cópias iguais -> 1 ocorrência. Um bloco dentro de um bloco duplicado
+# não conta à parte. As regras completas estão em copias_duplicadas
+# (analise_c.py); aqui só se consulta o resultado (ctx.c9_copias).
 
 def deteta_c9(n, ctx):
-    return (isinstance(n, Block)
-            and len(n.statements) >= MIN_INSTRUCOES
-            and ctx.blocos[repr(n)] >= 2)
+    return isinstance(n, Block) and id(n) in ctx.c9_copias
 
 
 # ---------------- catálogo deste grupo --------------------------------
