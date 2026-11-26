@@ -17,31 +17,28 @@ from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import (
 
 from .smell import Smell
 from .analise import (
-    LITERAIS, falha, puro, tipos_de, eh_booleana, eh_double, eh_numerica,
-    promovida, pai, parametro_seguro,
+    LITERAIS, falha, se_aplica, puro, tipos_de, eh_booleana, eh_numerica,
+    pai, parametro_seguro,
 )
 
 
 # ---------------- A1: soma/subtração com 0 ---------------------------
-# x + 0, 0 + x, x - 0  ->  x
-
-def deteta_soma_zero(n, ctx):
-    match n:
-        case Add(_, IntLit(0) | FloatLit(0.0)) | Add(IntLit(0) | FloatLit(0.0), _) \
-                | Sub(_, IntLit(0) | FloatLit(0.0)):
-            return True
-        case _:
-            return False
-
+# x + 0, 0 + x, x - 0, x + 0.0, 0.0 + x, x - 0.0  ->  x      (x int ou double)
+# Só para números: c + 0 (char) e b + 0 (bool) não são smell.
+# Opção do grupo: a + 0.0 com a int também é smell e fica a; a conversão
+# para double que o + 0.0 fazia é ignorada.
 
 def corrige_soma_zero(n, ctx):
     match n:
-        case Add(x, IntLit(0)) | Add(IntLit(0), x) | Sub(x, IntLit(0)) if not promovida(x, ctx):
+        case Add(x, IntLit(0) | FloatLit(0.0)) | Add(IntLit(0) | FloatLit(0.0), x) \
+                | Sub(x, IntLit(0) | FloatLit(0.0)) if eh_numerica(x, ctx):
             return x
-        case Add(x, FloatLit(0.0)) | Add(FloatLit(0.0), x) | Sub(x, FloatLit(0.0)) if eh_double(x, ctx):
-            return x                                # x + 0.0 com x int daria double
         case _:
             falha()
+
+
+def deteta_soma_zero(n, ctx):
+    return se_aplica(corrige_soma_zero, n, ctx)     # smell = a correção aplica-se
 
 
 def injeta_soma_zero(n, z, ctx):
@@ -51,25 +48,22 @@ def injeta_soma_zero(n, z, ctx):
 
 
 # ---------------- A2: multiplicação/divisão por 1 --------------------
-# x * 1, 1 * x, x / 1  ->  x
-
-def deteta_mult_um(n, ctx):
-    match n:
-        case Mul(_, IntLit(1) | FloatLit(1.0)) | Mul(IntLit(1) | FloatLit(1.0), _) \
-                | Div(_, IntLit(1) | FloatLit(1.0)):
-            return True
-        case _:
-            return False
-
+# x * 1, 1 * x, x / 1, x * 1.0, 1.0 * x, x / 1.0  ->  x      (x int ou double)
+# Só para números: c * 1 (char), b * 1 (bool) e tipos desconhecidos não são smell.
+# Opção do grupo: a * 1.0 com a int também é smell e fica a; a conversão
+# para double que o 1.0 fazia é ignorada.
 
 def corrige_mult_um(n, ctx):
     match n:
-        case Mul(x, IntLit(1)) | Mul(IntLit(1), x) | Div(x, IntLit(1)) if not promovida(x, ctx):
-            return x
-        case Mul(x, FloatLit(1.0)) | Mul(FloatLit(1.0), x) | Div(x, FloatLit(1.0)) if eh_double(x, ctx):
+        case Mul(x, IntLit(1) | FloatLit(1.0)) | Mul(IntLit(1) | FloatLit(1.0), x) \
+                | Div(x, IntLit(1) | FloatLit(1.0)) if eh_numerica(x, ctx):
             return x
         case _:
             falha()
+
+
+def deteta_mult_um(n, ctx):
+    return se_aplica(corrige_mult_um, n, ctx)       # smell = a correção aplica-se
 
 
 def injeta_mult_um(n, z, ctx):
@@ -79,26 +73,25 @@ def injeta_mult_um(n, z, ctx):
 
 
 # ---------------- A3: multiplicação por 0 ----------------------------
-# x * 0, 0 * x  ->  0
+# x * 0, 0 * x, x * 0.0, 0.0 * x  ->  0 (o zero como estava escrito)
+# Só para números (int ou double): c * 0, b * 0 e tipos desconhecidos não
+# são smell. Opção do grupo: um double é tratado como número normal
+# (ignora-se o caso NaN/infinito * 0).
+# Só se corrige se x for puro: f(a) * 0 perdia a chamada e (a / b) * 0
+# escondia uma possível divisão por zero. Esses são smell não corrigível.
 
 def deteta_mult_zero(n, ctx):
     match n:
-        case Mul(_, IntLit(0) | FloatLit(0.0)) | Mul(IntLit(0) | FloatLit(0.0), _):
+        case Mul(x, IntLit(0) | FloatLit(0.0)) | Mul(IntLit(0) | FloatLit(0.0), x) if eh_numerica(x, ctx):
             return True
         case _:
             return False
 
 
-def pode_anular(x, ctx):
-    """f() * 0 perdia a chamada; d * 0 com d double pode ser NaN."""
-    t = tipos_de(x, ctx)
-    return puro(x) and bool(t) and "double" not in t
-
-
 def corrige_mult_zero(n, ctx):
     match n:
         case Mul(x, (IntLit(0) | FloatLit(0.0)) as zero) | Mul((IntLit(0) | FloatLit(0.0)) as zero, x) \
-                if pode_anular(x, ctx):
+                if eh_numerica(x, ctx) and puro(x):
             return zero
         case _:
             falha()
@@ -107,23 +100,17 @@ def corrige_mult_zero(n, ctx):
 def injeta_mult_zero(n, z, ctx):
     if n != IntLit(0):                              # só onde já há um 0
         falha()
-    p = parametro_seguro(z, ctx) or IntLit(ctx.rng.randint(2, 9))
+    p = parametro_seguro(z, ctx, {"int", "double"}) or IntLit(ctx.rng.randint(2, 9))
     return ctx.rng.choice([Mul(p, IntLit(0)), Mul(IntLit(0), p)])
 
 
 # ---------------- A4: comparação com booleano -----------------------
 # x == true, x != false  ->  x        x == false, x != true  ->  !x
-
-def deteta_comp_bool(n, ctx):
-    match n:
-        case Equals(_, BoolLit()) | Equals(BoolLit(), _) | NotEquals(_, BoolLit()) | NotEquals(BoolLit(), _):
-            return True
-        case _:
-            return False
-
+# Só quando x é bool (variável, comparação, && / ||, função que devolve bool).
+# Comparar um número com true/false (a == true com a int) não é smell, é um
+# erro: não é detetado nem corrigido.
 
 def corrige_comp_bool(n, ctx):
-    # x tem de ser bool: x == true com x = 2 é falso, mas x é verdadeiro
     match n:
         case Equals(x, BoolLit(True)) | Equals(BoolLit(True), x) \
                 | NotEquals(x, BoolLit(False)) | NotEquals(BoolLit(False), x) if eh_booleana(x, ctx):
@@ -135,36 +122,39 @@ def corrige_comp_bool(n, ctx):
             falha()
 
 
+def deteta_comp_bool(n, ctx):
+    return se_aplica(corrige_comp_bool, n, ctx)     # smell = a correção aplica-se
+
+
 def injeta_comp_bool(n, z, ctx):
     # não em literais: false -> true == false seria ambíguo de desfazer
     if isinstance(n, LITERAIS) or not eh_booleana(n, ctx):
         falha()
     opcoes = [Equals(n, BoolLit(True)), Equals(BoolLit(True), n), NotEquals(n, BoolLit(False))]
     match n:
-        case UnaryOp("!", x):                       # !x -> x == false
+        case UnaryOp("!", x) if eh_booleana(x, ctx):   # !x -> x == false (só se x for bool)
             opcoes.append(Equals(x, BoolLit(False)))
     return ctx.rng.choice(opcoes)
 
 
 # ---------------- A5: dupla negação ---------------------------------
-# !!x, -(-x)  ->  x
-
-def deteta_dupla_neg(n, ctx):
-    match n:
-        case UnaryOp("!", UnaryOp("!", _)) | UnaryOp("-", UnaryOp("-", _)):
-            return True
-        case _:
-            return False
-
+# !!x  ->  x   (x bool)          -(-x)  ->  x   (x int ou double)
+# Só quando o tipo condiz com o operador. Fora disso não é smell:
+#   !!a com a int é uma normalização para 0/1 (!!5 == 1)
+#   -(-c), -(-b) (char, bool) e tipos desconhecidos
 
 def corrige_dupla_neg(n, ctx):
     match n:
-        case UnaryOp("!", UnaryOp("!", x)) if eh_booleana(x, ctx):   # !!5 == 1, não 5
+        case UnaryOp("!", UnaryOp("!", x)) if eh_booleana(x, ctx):
             return x
-        case UnaryOp("-", UnaryOp("-", x)) if not promovida(x, ctx):
+        case UnaryOp("-", UnaryOp("-", x)) if eh_numerica(x, ctx):
             return x
         case _:
             falha()
+
+
+def deteta_dupla_neg(n, ctx):
+    return se_aplica(corrige_dupla_neg, n, ctx)     # smell = a correção aplica-se
 
 
 def injeta_dupla_neg(n, z, ctx):
@@ -180,27 +170,33 @@ def injeta_dupla_neg(n, z, ctx):
 
 # ---------------- A6: auto-comparação --------------------------------
 # x == x, x <= x, x >= x  ->  true        x != x, x < x, x > x  ->  false
+# Só para tipos comparáveis (int, double, char, bool). Strings ("a" == "a"
+# compara endereços em C: é um erro) e tipos desconhecidos não são smell.
+# Opção do grupo: um double é tratado como número normal (ignora-se o caso
+# NaN, em que d != d seria verdadeiro).
+# Só se corrige se x for puro: f(a) == f(a) chama f duas vezes (e pode dar
+# valores diferentes) e (a / k) == (a / k) esconderia uma divisão por zero.
+# Esses são smell não corrigível.
+
+def comparavel(x, ctx):
+    t = tipos_de(x, ctx)
+    return bool(t) and t <= {"int", "double", "char", "bool"}
+
 
 def deteta_auto_comp(n, ctx):
     match n:
         case Equals(a, b) | NotEquals(a, b) | LessThan(a, b) | LessEqual(a, b) \
-                | GreaterThan(a, b) | GreaterEqual(a, b) if a == b:
+                | GreaterThan(a, b) | GreaterEqual(a, b) if a == b and comparavel(a, ctx):
             return True
         case _:
             return False
 
 
-def pode_comparar(x, ctx):
-    """f() == f() pode ser falso; com double, NaN == NaN é falso."""
-    t = tipos_de(x, ctx)
-    return puro(x) and bool(t) and "double" not in t
-
-
 def corrige_auto_comp(n, ctx):
     match n:
-        case Equals(a, b) | LessEqual(a, b) | GreaterEqual(a, b) if a == b and pode_comparar(a, ctx):
+        case Equals(a, b) | LessEqual(a, b) | GreaterEqual(a, b) if a == b and comparavel(a, ctx) and puro(a):
             return BoolLit(True)
-        case NotEquals(a, b) | LessThan(a, b) | GreaterThan(a, b) if a == b and pode_comparar(a, ctx):
+        case NotEquals(a, b) | LessThan(a, b) | GreaterThan(a, b) if a == b and comparavel(a, ctx) and puro(a):
             return BoolLit(False)
         case _:
             falha()

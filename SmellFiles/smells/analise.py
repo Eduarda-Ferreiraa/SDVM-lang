@@ -36,6 +36,16 @@ def falha():
     raise st.StrategicError
 
 
+def se_aplica(corrige, n, ctx) -> bool:
+    """A função corrige_X aplica-se ao nó n? Usada pelos smells em que
+    "é smell" e "pode ser corrigido" são a mesma coisa (ex.: A1)."""
+    try:
+        corrige(n, ctx)
+        return True
+    except st.StrategicError:
+        return False
+
+
 # ---------------------------------------------------------------------
 # Pureza: avaliar e não tem efeitos nem pode falhar.
 # Na SDVM-lang o único efeito lateral numa expressão é uma FuncCall; o que
@@ -192,12 +202,12 @@ def pai(z):
     return z.path.pnodes[-1] if z.path and z.path.pnodes else None
 
 
-def parametro_seguro(z, ctx):
-    """Um parâmetro int/char/bool da função onde o nó está (está sempre no
-    âmbito), ou None."""
+def parametro_seguro(z, ctx, tipos=frozenset({"int", "char", "bool"})):
+    """Um parâmetro da função onde o nó está (está sempre no âmbito), com um
+    dos tipos indicados (por omissão int/char/bool), ou None."""
     f = z.ancestor(lambda u: isinstance(u.node(), FunctionDefinition))
     if f is None:
         return None
     nomes = [p.name for p in f.node().parameters
-             if ctx.tipos.get(p.name) and ctx.tipos[p.name] <= {"int", "char", "bool"}]
+             if ctx.tipos.get(p.name) and ctx.tipos[p.name] <= tipos]
     return Ident(ctx.rng.choice(nomes)) if nomes else None
