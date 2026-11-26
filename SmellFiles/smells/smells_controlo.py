@@ -15,7 +15,6 @@ from projeto1.SDVM_lang.ParserFiles.parser.declarations import (
 from projeto1.SDVM_lang.ParserFiles.parser.statements import (
     Assignment, ArrayAssignment, Print, Read, Return, FunctionCallStatement, Break, Continue
 )
-IntLit, LessThan
 from .smell import Smell
 from .analise import (
     LITERAIS, falha, puro, tipos_de, eh_booleana, eh_double, eh_numerica,
@@ -144,7 +143,7 @@ def corrige_empty_else(n, ctx):
 
 def injeta_empy_else(n, z, ctx):
     match n:
-        case IfStatement(condicao, then_branch, None) if not isinstance(condicao, BoolLit) and then_branch != Block([]):
+        case IfStatement(condicao, then_branch, None) if not isinstance(condicao, BoolLit) and isinstance(then_branch, Block) and then_branch != Block([]):
             return IfStatement(condicao,then_branch, Block([]))
         case _:
             falha()
