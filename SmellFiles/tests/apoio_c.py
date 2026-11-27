@@ -15,7 +15,7 @@ from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import IntLit, Float
 from projeto1.SDVM_lang.ParserFiles.parser.declarations import FunctionDefinition
 from projeto1.SDVM_lang.SmellFiles.smells.prettyPrinter import pretty, stmt
 from projeto1.SDVM_lang.SmellFiles.smells.detecao import detetar, relatorio
-from projeto1.SDVM_lang.SmellFiles.smells.smells_1 import nome_declarado
+from projeto1.SDVM_lang.SmellFiles.smells.smells_codigo import nome_declarado
 
 
 # ------------------------------------------------------------ geradores de código

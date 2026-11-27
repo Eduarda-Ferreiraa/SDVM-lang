@@ -1,24 +1,21 @@
-from StrategicProg.pyztrategic import strategy as st
-
 from projeto1.SDVM_lang.ParserFiles.parser.control_flow import (
-    Block, IfStatement, WhileStatement, ForStatement
+    Block, IfStatement, WhileStatement,
 )
 
 from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import (
-    BoolLit, IntLit, LessThan, UnaryOp, Equals, NotEquals, LessEqual, GreaterThan, GreaterEqual, And, Or
+    BoolLit, IntLit, LessThan, UnaryOp, Equals, NotEquals, LessEqual, GreaterThan, GreaterEqual, And, Or,
 )
 
 from projeto1.SDVM_lang.ParserFiles.parser.declarations import (
-    FunctionDefinition, VariableDeclaration, ArrayDeclaration
+    FunctionDefinition, VariableDeclaration, ArrayDeclaration,
 )
 
 from projeto1.SDVM_lang.ParserFiles.parser.statements import (
-    Assignment, ArrayAssignment, Print, Read, Return, FunctionCallStatement, Break, Continue
+    Assignment, Print, Return, Break, Continue,
 )
 from .smell import Smell
 from .analise import (
-    LITERAIS, falha, puro, tipos_de, eh_booleana, eh_double, eh_numerica,
-    promovida, pai, parametro_seguro,
+    falha, puro, eh_booleana, pai,
 )
 
 # ----------------B1: condição constante ---------------------------
@@ -62,7 +59,7 @@ def injeta_cond_const(n, z, ctx):
         IfStatement(BoolLit(False), Block([]), n),
     ])
 
-# ----------------B2: ramos iguais ---------------------------
+# ---------------- B2: ramos iguais ---------------------------
 
 def deteta_ramos_iguais(n, ctx):
     match n:
@@ -92,43 +89,44 @@ def injeta_ramos_iguais(n, z, ctx):
     cond = LessThan(IntLit(0), IntLit(1)) # expressão que é sempre verdade (0<1) - não ativa o A6 nem o B1
     return IfStatement(cond, n, n)
 
-# ----------------B3: ramos then vazio ---------------------------
+# ---------------- B3: ramos then vazio ---------------------------
 
 def deteta_empy_then(n, ctx):
     match n:
-        case IfStatement(condicao, Block([]), else_branch) if not isinstance(condicao, BoolLit): # ignora o caso de serem ambos vazios (B1)
+        case IfStatement(condicao, Block([]), else_branch) if not isinstance(condicao, BoolLit): # ignora o caso de serem condições constantes (B1)
             return True
         case _:
             return False
 
 def corrige_empty_then(n, ctx):
     match n:
+        # vamos ter de verificar se não são condições constantes para não entrar no B1
+        
+        # 1º caso: temos de ver se a condição não é do tipo f(x) e muda variáveis
         case IfStatement(condicao, Block([]), None) if not isinstance(condicao, BoolLit) and puro(condicao):
             return Block([])
-        case IfStatement(condicao, Block([]), else_branch) if not isinstance(condicao, BoolLit) and else_branch != Block([]):
+            
+        # 2º caso: 
+        case IfStatement(condicao, Block([]), else_branch) if not isinstance(condicao, BoolLit) and else_branch is not None and else_branch != Block([]):
             novo_then = else_branch if isinstance(else_branch, Block) else Block([else_branch])
             # se o then já vier com {} fica igual, senao temos de o meter dentro de chavetas
             return IfStatement(UnaryOp("!", condicao), novo_then, None)
+            
         case _:
             falha()
-
+            
 def injeta_empy_then(n, z, ctx):
     match n:
-        case IfStatement(condicao, then_branch, None) if then_branch != Block([]):
-            falha()
-            # evita dangling else se o if estiver dentro de outro if com else
-            p = pai(z)
-            if isinstance(p, IfStatement) and p.else_branch is not None and not isinstance(then_branch, Block):
-                falha()
+        case IfStatement(condicao, Block() as then_branch, None) if then_branch != Block([]) and eh_booleana(condicao, ctx) and not isinstance(condicao, UnaryOp):
             return IfStatement(UnaryOp("!", condicao), Block([]), then_branch)
         case _:
             falha()
 
-# ----------------B4: ramos else vazio ---------------------------
+# ---------------- B4: ramos else vazio ---------------------------
 
 def deteta_empy_else(n, ctx):
     match n:
-        case IfStatement(condicao, then_branch, Block([])) if not isinstance(condicao, BoolLit) and then_branch != Block([]): # ignora o caso de serem ambos vazios (B1)
+        case IfStatement(condicao, then_branch, Block([])) if not isinstance(condicao, BoolLit) and then_branch != Block([]): # ignora o caso de serem condições constantes (B1) ou ambos vazios (B3)
             return True
         case _:
             return False
@@ -136,7 +134,6 @@ def deteta_empy_else(n, ctx):
 def corrige_empty_else(n, ctx):
     match n:
         case IfStatement(condicao, then_branch, Block([])) if not isinstance(condicao, BoolLit) and then_branch != Block([]):
-            novo_then = then_branch if isinstance(then_branch, Block) else Block([then_branch])
             return IfStatement(condicao, then_branch, None)
         case _:
             falha()
@@ -148,7 +145,7 @@ def injeta_empy_else(n, z, ctx):
         case _:
             falha()
 
-# ----------------B5: ramos booleanos ---------------------------
+# ---------------- B5: ramos booleanos ---------------------------
 
 # para os casos em que temos {return x;} dentro de chavetas
 def unica_instr(ramo):
@@ -201,7 +198,7 @@ def injeta_ramos_bool(n, z, ctx):
         case _:
             falha()
 
-# ----------------B6: if redundante ---------------------------
+# ---------------- B6: if redundante ---------------------------
 
 def deteta_if_redundante(n, ctx):
     match n:
@@ -236,7 +233,7 @@ def injeta_if_redundante(n, z, ctx):
         case _:
             falha()
 
-# ----------------B7: bloco redundante ---------------------------
+# ---------------- B7: bloco redundante ---------------------------
 
 DECLS = (VariableDeclaration, ArrayDeclaration)
 

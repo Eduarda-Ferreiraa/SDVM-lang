@@ -6,7 +6,7 @@
 # blocos se repetem, ...), isso calcula-se UMA vez aqui, com uma TU
 # (full_tdTU), e fica guardado no Contexto (ver analise.py).
 # É a "análise em duas fases" das fichas:
-#     fase 1: recolher (aqui)      fase 2: consultar (smells_1.py)
+#     fase 1: recolher (aqui)      fase 2: consultar (smells_codigo.py)
 #
 
 from collections import Counter

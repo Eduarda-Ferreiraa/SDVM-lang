@@ -4,7 +4,7 @@
 # Para acrescentar um grupo novo: importá-lo e somar a sua lista SMELLS.
 # A deteção, o refactoring e a injeção usam esta lista e não precisam de
 # ser alterados.
-from . import smells_1
+from . import smells_codigo
 from . import smells_expressao
 from . import smells_controlo
 from . import smells_design
@@ -13,7 +13,7 @@ CATALOGO = (
     smells_expressao.SMELLS
     + smells_controlo.SMELLS
     + smells_design.SMELLS
-    + smells_1.SMELLS
+    + smells_codigo.SMELLS
 )
 
 POR_CODIGO = {s.codigo: s for s in CATALOGO}

@@ -3,7 +3,7 @@
     python3 -m projeto1.SDVM_lang.SmellFiles.tests.testeC2
 """
 from projeto1.SDVM_lang.SmellFiles.tests.apoio_c import main
-from projeto1.SDVM_lang.SmellFiles.smells.smells_1 import LIMITE_PARAMETROS as L
+from projeto1.SDVM_lang.SmellFiles.smells.smells_codigo import LIMITE_PARAMETROS as L
 
 CODIGO = "C2"
 
