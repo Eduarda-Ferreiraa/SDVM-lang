@@ -7,9 +7,6 @@
 # As contagens (instruções, profundidade, operadores lógicos) vêm do
 # metricas.py, para que o smell e a métrica reportada usem a mesma conta.
 
-from StrategicProg.pyztrategic.zipper import toZipper
-from StrategicProg.pyztrategic import strategy as st
-
 from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import IntLit, FloatLit
 from projeto1.SDVM_lang.ParserFiles.parser.declarations import (
     VariableDeclaration, ArrayDeclaration, Parameter, FunctionDefinition,
@@ -21,6 +18,7 @@ from projeto1.SDVM_lang.ParserFiles.parser.control_flow import (
 
 from .smell import Smell
 from .analise import falha
+from .analise_c import recolhe
 from .metricas import contar_instrucoes, calcular_profundidade, contar_operadores_logicos
 
 MAX_INSTRUCOES = 30            # C1: mais de 30 instruções
@@ -59,7 +57,7 @@ def deteta_condicao_complexa(n, ctx):
 # ---------------- C5: números mágicos --------------------------------
 # Cada literal numérico fora de NUMEROS_PERMITIDOS, exceto os que estão no
 # valor inicial de uma declaração (int dias = 7; a declaração dá-lhe nome):
-# ctx.numeros_excluidos, ver analise.py.
+# ctx.numeros_excluidos, ver numeros_em_declaracoes em analise_c.py.
 
 def deteta_numero_magico(n, ctx):
     match n:
@@ -92,13 +90,9 @@ def _local(n):
             falha()
 
 
-def _recolhe(worker, no) -> set[str]:
-    return set(st.full_tdTU(lambda z: st.adhocTU(st.failTU, worker, z), toZipper(no)))
-
-
 def globais_alterados(f, globais) -> set[str]:
-    """Nomes globais que a função f altera."""
-    return (_recolhe(_alterado, f) & globais) - _recolhe(_local, f)
+    """Nomes globais que a função f altera (duas TU sobre a função)."""
+    return (set(recolhe(_alterado, f)) & globais) - set(recolhe(_local, f))
 
 
 def deteta_estado_global_mutavel(n, ctx):

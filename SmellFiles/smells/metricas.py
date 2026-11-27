@@ -4,12 +4,10 @@
 # Por função: nº de instruções, ifs, ciclos, profundidade, complexidade
 # ciclomática e nº de parâmetros. Por programa: LOC.
 #
-# As contagens usam estratégias TU (full_tdTU), como a deteção dos smells:
+# As contagens usam estratégias TU (recolhe / recolhe_z de analise_c.py,
+# isto é, full_tdTU com adhocTU / adhocTUZ), como a deteção dos smells:
 # um worker reconhece o tipo de nó que interessa e a estratégia percorre a
 # árvore toda. Os smells C1, C3 e C4 podem importar estas funções daqui.
-
-from StrategicProg.pyztrategic.zipper import toZipper
-from StrategicProg.pyztrategic import strategy as st
 
 from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import And, Or
 from projeto1.SDVM_lang.ParserFiles.parser.declarations import FunctionDefinition
@@ -18,16 +16,17 @@ from projeto1.SDVM_lang.ParserFiles.parser.statements import (
 )
 from projeto1.SDVM_lang.ParserFiles.parser.declarations import VariableDeclaration, ArrayDeclaration
 from projeto1.SDVM_lang.ParserFiles.parser.control_flow import (
-    Block, IfStatement, WhileStatement, ForStatement,
+    IfStatement, WhileStatement, ForStatement,
 )
 
 from .analise import falha, pai
+from .analise_c import recolhe, recolhe_z
 from .prettyPrinter import pretty
 
 
 def contar(worker, no) -> int:
     """Nº de nós (dentro de `no`) em que o worker não falha: failTU `adhocTU` worker + full_tdTU."""
-    return len(st.full_tdTU(lambda z: st.adhocTU(st.failTU, worker, z), toZipper(no)))
+    return len(recolhe(worker, no))
 
 
 # ---------------------------------------------------------------------
@@ -86,8 +85,9 @@ INSTRUCOES = (
 
 
 def no_cabecalho_do_for(z) -> bool:
-    """O nó é o initializer, a condição ou o update de um for (não o corpo)?"""
-    return isinstance(pai(z), ForStatement) and len(z.path.l) < 3
+    """O nó é o initializer, a condição ou o update de um for (não o corpo)?
+    z.arity(): a posição do nó entre os irmãos (1.º, 2.º, ...); o corpo é o 4.º."""
+    return isinstance(pai(z), ForStatement) and z.arity() <= 3
 
 
 def uma_instrucao(n, z):
@@ -97,33 +97,38 @@ def uma_instrucao(n, z):
 
 
 def contar_instrucoes(no) -> int:
-    return len(st.full_tdTU(lambda z: st.adhocTUZ(st.failTU, uma_instrucao, z), toZipper(no)))
+    return len(recolhe_z(uma_instrucao, no))
 
 
 # ---------------------------------------------------------------------
 # Profundidade de aninhamento (if / while / for)
-# Recursiva porque é um máximo e não uma contagem: a profundidade de um nó
-# depende da dos filhos. Um else if fica ao mesmo nível do if (visualmente
-# é uma cadeia, não um aninhamento).
+# Com o zipper: o nível de um if/while/for é o nº de if/while/for no
+# caminho desde a raiz até ele (os antecessores, z.path.pnodes, mais ele
+# próprio). Uma TU (adhocTUZ) recolhe o nível de cada um e a profundidade
+# é o máximo. Um else if fica ao mesmo nível do if (visualmente é uma
+# cadeia, não um aninhamento): um if que é o else_branch de outro if não
+# soma. Um else normal ({ if ... }) soma, porque o if está dentro do bloco.
 # ---------------------------------------------------------------------
 
+CONTROLO = (IfStatement, WhileStatement, ForStatement)
+
+
+def _else_if(no, pai_no) -> bool:
+    """no é o else de pai_no e é um if (else if)? (is: o zipper guarda os nós originais)"""
+    return isinstance(no, IfStatement) and isinstance(pai_no, IfStatement) and pai_no.else_branch is no
+
+
+def nivel_de_controlo(n, z):
+    """worker: num if/while/for devolve [o seu nível de aninhamento]; nos outros nós falha."""
+    if not isinstance(n, CONTROLO):
+        falha()
+    caminho = (z.path.pnodes if z.path else ()) + (n,)
+    return [sum(1 for i, no in enumerate(caminho)
+                if isinstance(no, CONTROLO) and not (i > 0 and _else_if(no, caminho[i - 1])))]
+
+
 def calcular_profundidade(no) -> int:
-    match no:
-        case Block(instrucoes):
-            return max((calcular_profundidade(i) for i in instrucoes), default=0)
-        case IfStatement(_, ramo_then, ramo_else):
-            prof_then = 1 + calcular_profundidade(ramo_then)
-            if isinstance(ramo_else, IfStatement):          # else if: mesmo nível
-                prof_else = calcular_profundidade(ramo_else)
-            elif ramo_else is not None:
-                prof_else = 1 + calcular_profundidade(ramo_else)
-            else:
-                prof_else = 0
-            return max(prof_then, prof_else)
-        case WhileStatement(_, corpo) | ForStatement(_, _, _, corpo):
-            return 1 + calcular_profundidade(corpo)
-        case _:
-            return 0
+    return max(recolhe_z(nivel_de_controlo, no), default=0)
 
 
 # ---------------------------------------------------------------------
@@ -132,9 +137,17 @@ def calcular_profundidade(no) -> int:
 # (com avaliação em curto-circuito, cada um é um desvio no fluxo).
 # ---------------------------------------------------------------------
 
+def um_ponto_de_decisao(n):
+    match n:
+        case IfStatement() | WhileStatement() | ForStatement() | And() | Or():
+            return [n]
+        case _:
+            falha()
+
+
 def complexidade_ciclomatica(funcao) -> int:
-    corpo = funcao.body
-    return 1 + contar_ifs(corpo) + contar_ciclos(corpo) + contar_operadores_logicos(corpo)
+    """Uma só travessia (TU) que recolhe todos os pontos de decisão."""
+    return 1 + contar(um_ponto_de_decisao, funcao.body)
 
 
 # ---------------------------------------------------------------------
@@ -156,7 +169,7 @@ def parametros_de(n):
 
 def parametros_por_funcao(prog) -> list[tuple[str, int]]:
     """[(nome, nº de parâmetros)], incluindo funções com 0 parâmetros."""
-    return st.full_tdTU(lambda z: st.adhocTU(st.failTU, parametros_de, z), toZipper(prog))
+    return recolhe(parametros_de, prog)
 
 
 # ---------------------------------------------------------------------

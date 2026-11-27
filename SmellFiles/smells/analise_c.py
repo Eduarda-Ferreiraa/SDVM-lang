@@ -1,5 +1,5 @@
 # =====================================================================
-# Recolhas (TU) para os smells C2/C6/C7/C9
+# Recolhas (TU) para os smells C5, C6, C7, C8, C9
 # =====================================================================
 # Os workers de deteção só veem UM nó (ver smell.py). Quando um smell
 # precisa de saber algo sobre o programa todo (que nomes são usados, que
@@ -14,7 +14,7 @@ from collections import Counter
 from StrategicProg.pyztrategic.zipper import toZipper
 from StrategicProg.pyztrategic import strategy as st
 
-from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import Ident, Index
+from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import Ident, Index, IntLit, FloatLit
 from projeto1.SDVM_lang.ParserFiles.parser.declarations import (
     VariableDeclaration, ArrayDeclaration, Parameter, FunctionDefinition,
 )
@@ -30,9 +30,50 @@ def _falha():
     raise st.StrategicError
 
 
-def _recolhe(worker, prog):
-    """failTU `adhocTU` worker, aplicada a todos os nós (full_tdTU)."""
-    return st.full_tdTU(lambda z: st.adhocTU(st.failTU, worker, z), toZipper(prog))
+# ---------------------------------------------------------------------
+# Estratégias usadas em todo o projeto (aqui porque este ficheiro não
+# depende de nenhum outro do projeto: analise, metricas, injecao e os
+# smells importam-nas daqui sem ciclos de imports)
+# ---------------------------------------------------------------------
+
+def recolhe(worker, no) -> list:
+    """failTU `adhocTU` worker, aplicada a todos os nós (full_tdTU):
+    junta as listas que o worker devolve nos nós em que não falha."""
+    return st.full_tdTU(lambda z: st.adhocTU(st.failTU, worker, z), toZipper(no))
+
+
+def recolhe_z(worker, no) -> list:
+    """Igual, mas o worker recebe também o zipper (adhocTUZ), para ver onde
+    o nó está: o pai, os antecessores, a posição entre os irmãos."""
+    return st.full_tdTU(lambda z: st.adhocTUZ(st.failTU, worker, z), toZipper(no))
+
+
+# ---------------------------------------------------------------------
+# C5: que literais estão no valor inicial de uma declaração?
+# (int dias = 7; a declaração dá nome ao valor, por isso não é mágico.)
+# Basta aplicar a TU à declaração inteira: numa declaração os literais só
+# podem estar no valor inicial (o tipo e o nome são str, e o tamanho de um
+# array é um int do Python, não um IntLit). Guarda-se o id() do literal.
+# ---------------------------------------------------------------------
+
+def _literal(n):
+    match n:
+        case IntLit() | FloatLit():
+            return [id(n)]
+        case _:
+            _falha()
+
+
+def _literais_da_declaracao(n):
+    match n:
+        case VariableDeclaration() | ArrayDeclaration():
+            return recolhe(_literal, n)
+        case _:
+            _falha()
+
+
+def numeros_em_declaracoes(prog) -> set[int]:
+    return set(recolhe(_literais_da_declaracao, prog))
 
 
 # ---------------------------------------------------------------------
@@ -52,7 +93,7 @@ def _uso(n):
 
 
 def nomes_usados(prog) -> set[str]:
-    return set(_recolhe(_uso, prog))
+    return set(recolhe(_uso, prog))
 
 
 # ---------------------------------------------------------------------
@@ -74,7 +115,7 @@ def _contadores(no) -> set[str]:
                 return [nome]
             case _:
                 _falha()
-    return set(_recolhe(worker, no))
+    return set(recolhe(worker, no))
 
 
 def _declaracao(n):
@@ -91,10 +132,10 @@ def declaracoes_contador(prog) -> set[int]:
         match f:
             case FunctionDefinition():
                 nomes = _contadores(f)
-                return [ident for nome, ident in _recolhe(_declaracao, f) if nome in nomes]
+                return [ident for nome, ident in recolhe(_declaracao, f) if nome in nomes]
             case _:
                 _falha()
-    return set(_recolhe(por_funcao, prog))
+    return set(recolhe(por_funcao, prog))
 
 
 # ---------------------------------------------------------------------
@@ -112,7 +153,7 @@ def _bloco(n):
 
 
 def contagem_blocos(prog) -> Counter:
-    return Counter(_recolhe(_bloco, prog))
+    return Counter(recolhe(_bloco, prog))
 
 
 # ---------------------------------------------------------------------
@@ -129,7 +170,7 @@ def contagem_blocos(prog) -> Counter:
 #   - se nenhuma cópia está dentro de outro duplicado, o original é a
 #     primeira pela ordem da travessia (a ordem do código).
 # Para saber se um bloco está dentro de outro é preciso ver os antecessores,
-# por isso o worker usa o zipper (adhocTUZ, path.pnodes). Guarda-se o id()
+# por isso o worker usa o zipper (adhocTUZ, z.ancestor). Guarda-se o id()
 # dos blocos que contam (como no C6: interessa ESTE bloco, não outro igual).
 # ---------------------------------------------------------------------
 
@@ -145,11 +186,10 @@ def copias_duplicadas(prog) -> set[int]:
         """[(chave, id, está dentro de um bloco duplicado?)] para cada bloco duplicado."""
         if not _duplicado(n, blocos):
             _falha()
-        antecessores = z.path.pnodes if z.path else ()
-        dentro = any(_duplicado(a, blocos) for a in antecessores)
+        dentro = z.ancestor(lambda u: _duplicado(u.node(), blocos)) is not None
         return [(repr(n), id(n), dentro)]
 
-    ocorrencias = st.full_tdTU(lambda z: st.adhocTUZ(st.failTU, ocorrencia, z), toZipper(prog))
+    ocorrencias = recolhe_z(ocorrencia, prog)
 
     grupos = {}                           # chave -> [(id, dentro), ...] pela ordem do código
     for chave, ident, dentro in ocorrencias:
@@ -167,10 +207,18 @@ def copias_duplicadas(prog) -> set[int]:
 
 # ---------------------------------------------------------------------
 # C8: que nomes são variáveis/arrays globais?
-# Só interessam as declarações do nível de topo do programa, por isso basta
-# olhar para prog.declarations (não é preciso percorrer a árvore).
+# Uma declaração é global se não estiver dentro de nenhuma função: com o
+# zipper, não tem nenhum antecessor FunctionDefinition (z.ancestor).
 # ---------------------------------------------------------------------
 
+def _global(n, z):
+    match n:
+        case VariableDeclaration(_, nome, _) | ArrayDeclaration(_, nome, _, _) \
+                if z.ancestor(lambda u: isinstance(u.node(), FunctionDefinition)) is None:
+            return [nome]
+        case _:
+            _falha()
+
+
 def nomes_globais(prog) -> set[str]:
-    return {d.name for d in prog.declarations
-            if isinstance(d, (VariableDeclaration, ArrayDeclaration))}
+    return set(recolhe_z(_global, prog))

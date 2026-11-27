@@ -10,12 +10,12 @@
 # Ficam aqui (e não em cada ficheiro de smells) porque os outros grupos
 # também precisam delas: B2 "ramos iguais" precisa de puro, C7 "variável
 # não usada" precisa das declarações.
+# As recolhas sobre o programa todo para os smells C (fase 1) estão em
+# analise_c.py; o contexto junta tudo.
 
 import random
-from collections import Counter
-from dataclasses import dataclass, field, fields, is_dataclass
+from dataclasses import dataclass, field
 
-from StrategicProg.pyztrategic.zipper import toZipper
 from StrategicProg.pyztrategic import strategy as st
 
 from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import (
@@ -26,10 +26,12 @@ from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import (
 from projeto1.SDVM_lang.ParserFiles.parser.declarations import (
     VariableDeclaration, ArrayDeclaration, Parameter, FunctionDefinition,
 )
-from .analise_c import nomes_usados, declaracoes_contador, contagem_blocos, copias_duplicadas, nomes_globais
+from .analise_c import (
+    recolhe,
+    numeros_em_declaracoes, nomes_usados, declaracoes_contador, copias_duplicadas, nomes_globais,
+)
+
 LITERAIS = (IntLit, FloatLit, BoolLit, CharLit, StringLit)
-RELACIONAIS = (Equals, NotEquals, LessThan, LessEqual, GreaterThan, GreaterEqual)
-ARITMETICOS = (Add, Sub, Mul, Div, Mod)
 
 
 def falha():
@@ -64,7 +66,12 @@ def impuro(n):
 
 
 def puro(e) -> bool:
-    return st.full_tdTU(lambda z: st.adhocTU(st.failTU, impuro, z), toZipper(e)) == []
+    """Recolhe os nós impuros (full_tdTU) e vê se não há nenhum.
+    Não se usa once_tdTP (pararia no primeiro): nesta biblioteca, ao chegar a
+    uma folha o oneTPdown volta a lançar o AttributeError de None.down(), que
+    o choiceTP não apanha, e a procura é interrompida antes de ver os irmãos
+    seguintes (a própria biblioteca marca como "broken" o que usa once_*)."""
+    return recolhe(impuro, e) == []
 
 
 # ---------------------------------------------------------------------
@@ -85,13 +92,15 @@ def declaracao(n):
 
 def tipos_declarados(prog) -> dict[str, set[str]]:
     tipos = {}
-    for nome, t in st.full_tdTU(lambda z: st.adhocTU(st.failTU, declaracao, z), toZipper(prog)):
+    for nome, t in recolhe(declaracao, prog):
         tipos.setdefault(nome, set()).add(t)
     return tipos
 
 
 def tipos_de(e, ctx) -> set[str]:
-    """Tipos possíveis de e. Conjunto vazio = desconhecido (ou não é expressão)."""
+    """Tipos possíveis de e. Conjunto vazio = desconhecido (ou não é expressão).
+    Recursiva porque o tipo de uma expressão depende do dos filhos (como
+    uma gramática de atributos sintetizados), não é uma recolha."""
     match e:
         case IntLit():    return {"int"}
         case FloatLit():  return {"double"}
@@ -139,36 +148,6 @@ def promovida(e, ctx) -> bool:
     return bool(tipos_de(e, ctx) & {"char", "bool", "string"})
 
 
-def numeros_em_declaracoes(prog):
-    excluidos = set()
-
-    def visitar(no):
-        if isinstance(no, (IntLit, FloatLit)):
-            excluidos.add(id(no))
-
-        elif isinstance(no, (list, tuple)):
-            for elemento in no:
-                visitar(elemento)
-
-        elif is_dataclass(no):
-            for campo in fields(no):
-                visitar(getattr(no, campo.name))
-
-    def procurar(no):
-        if isinstance(no, (VariableDeclaration, ArrayDeclaration)):
-            visitar(no.initializer)
-
-        elif isinstance(no, (list, tuple)):
-            for elemento in no:
-                procurar(elemento)
-
-        elif is_dataclass(no):
-            for campo in fields(no):
-                procurar(getattr(no, campo.name))
-
-    procurar(prog)
-    return excluidos
-
 # ---------------------------------------------------------------------
 # Contexto: o que se calcula uma vez por programa
 # ---------------------------------------------------------------------
@@ -177,12 +156,11 @@ def numeros_em_declaracoes(prog):
 class Contexto:
     tipos: dict[str, set[str]]
     rng: random.Random = field(default_factory=random.Random)
-    numeros_excluidos: set[int] = field(default_factory=set)
-    usados: set[str] = field(default_factory=set)
-    decl_for: set[int] = field(default_factory=set)
-    blocos: Counter = field(default_factory=Counter)
-    c9_copias: set[int] = field(default_factory=set)   # C9: id() dos blocos que são cópias a mais
-    globais: set[str] = field(default_factory=set)     # C8: nomes das variáveis/arrays globais
+    numeros_excluidos: set[int] = field(default_factory=set)   # C5: id() dos literais em declarações
+    usados: set[str] = field(default_factory=set)              # C7: nomes usados no programa
+    decl_for: set[int] = field(default_factory=set)            # C6: id() das declarações de contadores de for
+    c9_copias: set[int] = field(default_factory=set)           # C9: id() dos blocos que são cópias a mais
+    globais: set[str] = field(default_factory=set)             # C8: nomes das variáveis/arrays globais
 
 
 def contexto(prog, seed=None) -> Contexto:
@@ -192,7 +170,6 @@ def contexto(prog, seed=None) -> Contexto:
         numeros_excluidos=numeros_em_declaracoes(prog),
         usados=nomes_usados(prog),
         decl_for=declaracoes_contador(prog),
-        blocos=contagem_blocos(prog),
         c9_copias=copias_duplicadas(prog),
         globais=nomes_globais(prog),
     )
