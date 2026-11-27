@@ -2,15 +2,21 @@
 # Métricas
 # =====================================================================
 # Por função: nº de instruções, ifs, ciclos, profundidade, complexidade
-# ciclomática e nº de parâmetros. Por programa: LOC.
+# ciclomática, nº de parâmetros e Halstead. Por programa: LOC e Halstead.
 #
 # As contagens usam estratégias TU (recolhe / recolhe_z de analise_c.py,
 # isto é, full_tdTU com adhocTU / adhocTUZ), como a deteção dos smells:
 # um worker reconhece o tipo de nó que interessa e a estratégia percorre a
 # árvore toda. Os smells C1, C3 e C4 podem importar estas funções daqui.
 
-from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import And, Or
-from projeto1.SDVM_lang.ParserFiles.parser.declarations import FunctionDefinition
+import math
+
+from projeto1.SDVM_lang.ParserFiles.parser.expressionParser import (
+    IntLit, FloatLit, BoolLit, CharLit, StringLit, Ident, Index, FuncCall, UnaryOp, Cast,
+    Add, Sub, Mul, Div, Mod, Equals, NotEquals, LessThan, LessEqual, GreaterThan, GreaterEqual,
+    And, Or,
+)
+from projeto1.SDVM_lang.ParserFiles.parser.declarations import FunctionDefinition, Parameter
 from projeto1.SDVM_lang.ParserFiles.parser.statements import (
     Assignment, ArrayAssignment, Print, Read, Return, FunctionCallStatement, Break, Continue,
 )
@@ -198,3 +204,125 @@ def metricas_funcao(funcao) -> dict:
 
 def loc(prog) -> int:
     return sum(1 for linha in pretty(prog).splitlines() if linha.strip())
+
+
+# ---------------------------------------------------------------------
+# Halstead (fórmulas do PDF de Software Metrics)
+#   n1, n2 = operadores / operandos distintos     N1, N2 = totais
+#   n = n1 + n2   N = N1 + N2   V = N log2 n   D = n1/2 + N2/n2   E = V D
+# A dificuldade é a do PDF (n1/2 + N2/n2), decisão do grupo; a fórmula
+# habitual do Halstead é (n1/2) * (N2/n2).
+#
+# Convenção (cada ocorrência conta; os distintos contam-se pelo símbolo):
+#   operadores  + - * / % == != < <= > >= && ||, os unários ! e -
+#               (o - unário é um símbolo diferente do binário), o cast
+#               (um símbolo por tipo: "(int)", "(double)"), = (atribuição e
+#               declaração com valor inicial), [] (indexação), () (chamada),
+#               e as palavras-chave if, else, while, for, return, print,
+#               read, break, continue
+#   operandos   os nomes (variáveis, arrays, parâmetros, funções), em todas
+#               as ocorrências, incluindo as declarações; os literais, pelo
+#               valor e pelo tipo (1, 1.0 e true são três operandos
+#               diferentes); o tamanho de um array declarado conta como
+#               literal int
+#   de fora     ; { } e parênteses de agrupamento (formatação), e os tipos
+#               das declarações (não fazem nenhuma operação)
+# Por partir da AST, o Halstead não depende da formatação: o programa
+# original e o pretty dele dão os mesmos valores.
+# ---------------------------------------------------------------------
+
+SIMBOLOS = {
+    Add: "+", Sub: "-", Mul: "*", Div: "/", Mod: "%",
+    Equals: "==", NotEquals: "!=", LessThan: "<", LessEqual: "<=",
+    GreaterThan: ">", GreaterEqual: ">=", And: "&&", Or: "||",
+}
+
+PALAVRAS = {
+    WhileStatement: "while", ForStatement: "for", Return: "return", Print: "print",
+    Read: "read", Break: "break", Continue: "continue",
+}
+
+
+def operadores_de(n):
+    """worker: os operadores que o nó n escreve (pode ser mais do que um)."""
+    match n:
+        case _ if type(n) in SIMBOLOS:
+            return [SIMBOLOS[type(n)]]
+        case _ if type(n) in PALAVRAS:
+            return [PALAVRAS[type(n)]]
+        case UnaryOp("!", _):
+            return ["!"]
+        case UnaryOp(op, _):
+            return [op + " unário"]                 # - unário != - binário
+        case Cast(t, _):
+            return [f"({t})"]
+        case Index():
+            return ["[]"]
+        case FuncCall():
+            return ["()"]
+        case Assignment():
+            return ["="]
+        case ArrayAssignment():
+            return ["[]", "="]
+        case VariableDeclaration(_, _, init) | ArrayDeclaration(_, _, _, init) if init is not None:
+            return ["="]
+        case IfStatement(_, _, senao):
+            return ["if"] if senao is None else ["if", "else"]
+        case _:
+            falha()
+
+
+def operandos_de(n):
+    """worker: os operandos que o nó n escreve."""
+    match n:
+        case IntLit(v):
+            return [f"int {v}"]
+        case FloatLit(v):
+            return [f"double {v}"]
+        case BoolLit(v):
+            return ["true" if v else "false"]
+        case CharLit(v):
+            return [f"char {v}"]
+        case StringLit(v):
+            return [f"string {v}"]
+        case ArrayDeclaration(_, nome, tamanho, _):
+            return [nome, f"int {tamanho}"]
+        case Ident(nome) | Index(nome, _) | FuncCall(nome, _) | Assignment(nome, _) \
+                | ArrayAssignment(nome, _, _) | Read(nome) | VariableDeclaration(_, nome, _) \
+                | Parameter(_, nome) | FunctionDefinition(_, nome, _, _):
+            return [nome]
+        case _:
+            falha()
+
+
+def halstead(no) -> dict:
+    """Halstead de um programa ou de uma função (duas TU)."""
+    operadores = recolhe(operadores_de, no)
+    operandos = recolhe(operandos_de, no)
+    n1, n2 = len(set(operadores)), len(set(operandos))
+    N1, N2 = len(operadores), len(operandos)
+    n, N = n1 + n2, N1 + N2
+    volume = N * math.log2(n) if n > 1 else 0.0
+    dificuldade = n1 / 2 + (N2 / n2 if n2 else 0.0)
+    return {
+        "n1": n1, "n2": n2, "N1": N1, "N2": N2,
+        "vocabulario": n, "comprimento": N,
+        "volume": volume, "dificuldade": dificuldade, "esforco": volume * dificuldade,
+    }
+
+
+# ---------------------------------------------------------------------
+# Métricas de todas as funções (TU)
+# ---------------------------------------------------------------------
+
+def _metricas_de(n):
+    match n:
+        case FunctionDefinition():
+            return [metricas_funcao(n) | {"halstead": halstead(n)}]
+        case _:
+            falha()
+
+
+def metricas_por_funcao(prog) -> list[dict]:
+    """[metricas_funcao + halstead] de cada função, pela ordem do programa."""
+    return recolhe(_metricas_de, prog)

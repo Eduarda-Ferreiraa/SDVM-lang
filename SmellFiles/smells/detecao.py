@@ -63,10 +63,14 @@ def divida_tecnica(prog, codigos=None) -> int:
     return sum(td for *_, td in relatorio(prog, codigos))
 
 
-def imprime_relatorio(prog, codigos=None):
+def imprime_relatorio(prog, codigos=None, so_encontrados=False):
+    """Tabela dos smells. Com so_encontrados=True não mostra as linhas a 0
+    (o total é o mesmo)."""
     linhas = relatorio(prog, codigos)
     print(f"{'':4}{'smell':<30}{'ocorr.':>7}{'corrig.':>9}{'min/oc.':>9}{'TD (min)':>10}")
     for c, nome, n, ok, custo, td in linhas:
+        if so_encontrados and n == 0:
+            continue
         print(f"{c:<4}{nome:<30}{n:>7}{ok:>9}{custo:>9}{td:>10}")
     print(f"{'':4}{'total':<30}{sum(l[2] for l in linhas):>7}"
           f"{sum(l[3] for l in linhas):>9}{'':>9}{sum(l[5] for l in linhas):>10}")

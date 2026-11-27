@@ -33,7 +33,12 @@ Conceitos usados nas condições:
     aplica (mudava o comportamento). O relatório mostra-os à parte.
 
 TD = soma de (ocorrências x custo de remediação por ocorrência), em minutos,
-inspirado no modelo SQALE (SonarQube). Os custos são uma proposta do grupo.
+como no modelo SQALE do SonarQube. Os custos por smell são fixos (decisão do
+grupo) e estão em cada smell abaixo; o cálculo completo do TD (unidades,
+euros, rácio, classificação A-E) está na secção TD, no fim.
+
+Ordem: o catálogo (catalogo.py) está ordenado pelo código (A1..A7, B1..B10,
+C1..C9), por isso os relatórios mostram os smells por esta ordem.
 
 Injeção (A e B): uma ocorrência de cada vez, em sítios diferentes, com
 limite opcional, e nunca dois smells no mesmo sítio (nem no nó, nem dentro
@@ -139,7 +144,7 @@ B. SMELLS DE INSTRUÇÃO / FLUXO DE CONTROLO
    Locais, refactoring com estratégias TP, injetáveis.
    ESTADO: B1-B8 implementados em smells_controlo.py; EM REVISÃO (há
            correções propostas por aplicar: B3, B4, B5, B6). B9 e B10 não
-           estão implementados. Os custos são os do código.
+           estão implementados. Os custos e os nomes são os do código.
 -----------------------------------------------------------------------------
 
 B1  Condição constante                                            TD: 3 min
@@ -168,10 +173,15 @@ B4  Else vazio                                                    TD: 1 min
 
 B5  Retorno booleano redundante                                   TD: 2 min
     Padrão:      IfStatement(c, Return(BoolLit(True)), Return(BoolLit(False)))
-                 (também com os Return dentro de Block([...]))
+                 IfStatement(c, Assignment(v, BoolLit(True)), Assignment(v, BoolLit(False)))
+                 (também com as instruções dentro de Block([...]))
                  ex.: if (c) return true; else return false;
-    Refactoring: Return(c)   (ou Return(UnaryOp("!", c)) no caso inverso)
-    Condição:    tipos_de(c) == {bool}
+                      if (c) ok = true; else ok = false;
+    Refactoring: Return(c) / Assignment(v, c)
+                 (com UnaryOp("!", c) no caso inverso)
+    Condição:    tipos_de(c) == {bool}  (correção proposta, ainda não está no
+                 código: sem ela, if (n) return true; ... com n int passa a
+                 return n;)
 
 B6  Ifs aninhados colapsáveis                                     TD: 2 min
     Padrão:      IfStatement(a, Block([IfStatement(b, S, None)]), None)
@@ -322,26 +332,86 @@ detetável sem alterar o lexer. Fica de fora.
 -----------------------------------------------------------------------------
 MÉTRICAS (metricas.py, calculadas sobre a AST com estratégias TU)
 -----------------------------------------------------------------------------
-LOC                     linhas não vazias de pretty(ast): funciona para
+Por programa:
+  LOC                   linhas não vazias de pretty(ast): funciona para
                         programas originais e transformados, independente da
                         formatação. Conta as linhas só com chavetas; não conta
                         comentários (o parser descarta-os).
-Por função:
+  NOF                   nº de funções (TU sobre FunctionDefinition)
+  totais e médias       instruções, ifs e ciclos; complexidade ciclomática
+                        média e máxima; profundidade máxima
+                        (metricas_programa)
+  Halstead              ver abaixo
+Por função (metricas_por_funcao):
+  nº de parâmetros      a mesma conta do C2 (NOA)
   nº de instruções      a mesma conta do C1
   nº de ifs             cada if, incluindo os else if
   nº de ciclos          while e for
-  profundidade          a mesma conta do C3 (else if ao mesmo nível)
+  profundidade          a mesma conta do C3 (else if ao mesmo nível); TU com
+                        zipper: o nível de cada if/while/for é o nº de
+                        if/while/for no caminho até ele
   complexidade          1 + nº de if + nº de ciclos + nº de && / ||
-  ciclomática           (McCabe; com curto-circuito, cada && / || é um desvio)
-  nº de parâmetros      a mesma conta do C2
+  ciclomática           (McCabe; com curto-circuito, cada && / || é um
+                        desvio); uma só TU que recolhe os pontos de decisão
+  Halstead              o da função
 Nº de smells            por tipo, total e corrigíveis (relatório)
-TD                      soma de ocorrências x custo (minutos) = tempo estimado
-                        de um engenheiro para resolver; calculado antes e
-                        depois do refactoring.
+
+Halstead (fórmulas do PDF de Software Metrics):
+  n1, n2 = operadores / operandos distintos;  N1, N2 = totais
+  vocabulário n = n1 + n2        comprimento N = N1 + N2
+  volume      V = N x log2(n)    (0 se n <= 1)
+  dificuldade D = n1/2 + N2/n2   (a do PDF, decisão do grupo; a fórmula
+                                  habitual é (n1/2) x (N2/n2))
+  esforço     E = V x D
+  Convenção (cada ocorrência conta; os distintos contam-se pelo símbolo):
+    operadores  + - * / % == != < <= > >= && ||; os unários ! e - (o -
+                unário é um símbolo diferente do binário); o cast, um
+                símbolo por tipo ("(int)", "(double)"); = (atribuição e
+                declaração com valor inicial); [] (indexação); () (chamada);
+                as palavras-chave if, else, while, for, return, print,
+                read, break, continue
+    operandos   os nomes (variáveis, arrays, parâmetros, funções) em todas
+                as ocorrências, incluindo as declarações; os literais, pelo
+                valor e pelo tipo (1, 1.0 e true são diferentes); o tamanho
+                de um array declarado conta como literal int
+    de fora     ; { } e parênteses de agrupamento (formatação); os tipos
+                das declarações
+  Por partir da AST, não depende da formatação: o programa e o pretty dele
+  dão o mesmo Halstead (é uma das críticas do PDF ao LOC).
+
+Ficam de fora: o nº de comentários (o parser descarta-os) e o tempo de
+execução, memória e energia (precisam de executar o programa).
 
 
 -----------------------------------------------------------------------------
-TESTES (SmellFiles/tests/)
+TD — DÍVIDA TÉCNICA (detecao.py, divida.py)
+-----------------------------------------------------------------------------
+Modelo SQALE do SonarQube: o TD é o esforço para corrigir todos os smells.
+  TD (min)        soma de ocorrências x custo (os custos fixos de cada smell)
+  TD (h, dias)    TD / 60, TD / 480 (dia de 8 h, como no SonarQube)
+  TD (€)          TD x 1500 € / 176 h / 60 = TD x 0,142 €
+                  (1500 €/mês = custo total de um engenheiro, 22 dias de 8 h;
+                  sem encargos da empresa nem impostos)
+  rácio           TD / (LOC x 28,8 min)
+                  28,8 min = 0,06 dias, o custo de desenvolver uma linha por
+                  omissão no SonarQube: é o custo total por linha (desenho,
+                  testes, revisão), não o de a escrever; é configurável
+                  (MIN_POR_LOC)
+  classificação   grelha por omissão do SonarQube (maintainability rating):
+                  A até 5 %, B 6-10 %, C 11-20 %, D 21-50 %, E mais de 50 %
+  por grupo       TD dos A, dos B e dos C
+  por função      smells e TD de cada função (z.ancestor até à
+                  FunctionDefinition de cada smell): a prioridade
+  antes/depois    tudo calculado antes e depois do refactoring
+O TD calculado é o "principal" do PDF; os "juros" (o custo extra de manter
+o código com smells) não se medem só a partir do código.
+Notas: o TD pode subir depois de corrigir (a correção dos A cria C7 e C9:
+programa relatorio da demo); o rácio pode subir com o TD a descer, porque o
+LOC também desce (programa stock da demo).
+
+
+-----------------------------------------------------------------------------
+TESTES (SmellFiles/tests/) E DEMONSTRAÇÃO (SmellFiles/demo/)
 -----------------------------------------------------------------------------
 testeExpressoes     A1-A7: deteção, refactoring e injeção (2 programas base,
                     literais neutros, injeção aleatória, sobreposição)
@@ -350,4 +420,14 @@ testeC1 ... testeC9 um ficheiro por smell C (limites, exceções, decisões, TD)
 testeIntegracao     4 programas grandes com A e C misturados: contagens e TD
                     antes/depois de corrigir, roundtrip, idempotência,
                     injeção no programa corrigido
+testeMetricas       Halstead (7 casos contados à mão, independência da
+                    formatação) e metricas_por_funcao
+testeDemo           os 3 programas da demonstração: contagens de todo o
+                    catálogo e TD antes/depois, roundtrip, idempotência,
+                    injeção reversível
 testeProgramas      os programas de exemplo
+demo/demo.py        a demonstração da apresentação: código, smells, TD,
+                    métricas, refactoring, antes/depois e injeção
+                    (um de cada tipo por omissão; --seed N, --aleatorio,
+                    --com-b)
+demo/exemplos_demo.py  os programas notas, stock e relatorio
